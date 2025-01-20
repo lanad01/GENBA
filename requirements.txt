@@ -194,7 +194,7 @@ orjson==3.10.6
 outlines==0.1.11
 outlines_core==0.1.26
 overrides==7.7.0
-packaging==23.3
+# packaging==23.3
 pandas==2.2.2
 pandocfilters==1.5.1
 parso==0.8.3
