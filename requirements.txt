@@ -45,7 +45,6 @@ cssutils==2.11.1
 cycler==0.12.1
 dataclasses-json==0.6.7
 dataframe_image==0.2.4
-datasets==2.20.0
 debugpy==1.8.0
 decorator==5.1.1
 deepdiff==7.0.1
