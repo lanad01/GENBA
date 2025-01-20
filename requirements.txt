@@ -149,8 +149,8 @@ mdurl==0.1.2
 mistral_common==1.5.1
 mistune==3.0.2
 # mkl-fft==1.2.0
-mkl-random==1.2.2
-mkl-service==2.4.0
+# mkl-random==1.2.2
+# mkl-service==2.4.0
 mmh3==4.1.0
 monotonic==1.6
 more-itertools==10.4.0
