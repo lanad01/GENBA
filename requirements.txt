@@ -224,7 +224,7 @@ protobuf==5.29.3
 protoc-gen-openapiv2==0.0.1
 psutil==5.9.7
 pulsar-client==3.5.0
-pure_eval==0.6.3
+# pure_eval==0.6.3
 py-cpuinfo==9.0.0
 py-spy==0.4.0
 pyarrow==17.0.0
