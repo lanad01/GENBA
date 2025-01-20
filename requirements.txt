@@ -207,10 +207,10 @@ peft==0.12.0
 pickleshare==0.7.5
 pillow==10.4.0
 pillow_heif==0.18.0
-pinecone-client==5.0.0
-pinecone-plugin-inference==1.0.2
-pinecone-plugin-interface==0.0.7
-pinecone-text==0.9.0
+# pinecone-client==5.0.0
+# pinecone-plugin-inference==1.0.2
+# pinecone-plugin-interface==0.0.7
+# pinecone-text==0.9.0
 platformdirs==3.10.0
 poppler-utils==0.1.0
 portalocker==2.10.1
