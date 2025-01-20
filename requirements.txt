@@ -138,7 +138,7 @@ llvmlite==0.43.0
 lm-format-enforcer==0.10.9
 lxml==5.2.2
 lz4==4.3.3
-mariadb==1.1.11
+# mariadb==1.1.11
 Markdown==3.7
 markdown-it-py==3.0.0
 MarkupSafe==2.1.3
