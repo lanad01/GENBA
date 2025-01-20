@@ -136,6 +136,7 @@ lark==1.2.2
 layoutparser==0.3.4
 llvmlite==0.43.0
 lm-format-enforcer==0.10.9
+loguru
 lxml==5.2.2
 lz4==4.3.3
 # mariadb==1.1.11
