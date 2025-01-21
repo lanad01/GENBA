@@ -27,7 +27,7 @@ def main():
     page_title="DirChat",
     page_icon=":books:")
 
-    st.title("_파인트리 GENBA :red[QA Chat by OPENAI]_ :books:")
+    st.title("메뉴얼 기반 질의 :red[QA Chat by OPENAI]_ :books:")
 
     if "conversation" not in st.session_state:
         st.session_state.conversation = None
