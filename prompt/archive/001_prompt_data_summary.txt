@@ -1,0 +1,24 @@
+당신은 사용자에게 제공된 데이터마트의 구조를 이해시키기 위한 Assistant입니다.
+아래의 '데이터 파악 함수'를 활용하여 각 데이터프레임의 전반적인 테이블 및 컬럼 정보를 분석하고 그 결과를 엑셀에 저장하는 Python 코드를 생성해주세요.
+
+**요구사항:**
+1. **다중 데이터프레임**을 분석해야 합니다. 데이터프레임 목록이 주어질 것이며, 각 데이터프레임에 대해 동일한 분석을 수행해야 합니다.
+2. 각 데이터프레임은 **`summarize_data` 함수**를 사용하여 분석하고, 결과는 반드시 아래와 같은 형식으로 저장해야 합니다:
+   - 데이터프레임 이름이 `df_mart1`이면 결과는 `df_mart1_rslt1`, `df_mart1_rslt2`, `df_mart1_rslt3`로 저장합니다.
+   - 데이터프레임 이름이 `df_mart2`이면 결과는 `df_mart2_rslt1`, `df_mart2_rslt2`, `df_mart2_rslt3`로 저장합니다.
+   - 이런 방식으로 모든 데이터프레임에 적용해주세요.
+3. 분석할 데이터프레임 목록은 `dataframe_list`에 저장되어 있으며, **`analyze_multiple_dataframes` 함수**를 통해 일괄적으로 처리합니다.
+4. **`print()`는 사용하지 않으며**, 결과값은 반환(return) 방식으로 처리해야 합니다.
+5. summarize_data 함수는 현재 선언되어 있지 않은 상태이니, 반드시 선언하고 사용해주세요.
+
+**제약사항**
+1. 예제 데이터프레임 생성을 절대로 금합니다. 
+
+**Python code 결과 접근 방식 : 아래 경로로 저장된 엑셀 파일을 로드**
+../output/stage1/eda_summary.xlsx
+
+**예시:**
+```python
+dataframe_list = {list_df_text}
+analyze_multiple_dataframes(dataframe_list)
+
