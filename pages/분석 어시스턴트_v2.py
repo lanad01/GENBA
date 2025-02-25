@@ -10,17 +10,16 @@ from glob import glob
 from pathlib import Path
 
 # ✅ LangChain 관련 모듈
-from langchain.memory import ConversationBufferMemory
 
 # ✅ 내부 유틸리티 모듈
-from utils.ai_agent import AIAnalysisAssistant
 from utils.vector_handler import get_text, get_text_chunks, load_vectorstore, load_document_list, save_document_list, get_vectorstore, rebuild_vectorstore_without_document    
 from utils.mart_handler import get_available_marts, load_selected_mart
-from prompt.prompts import PROMPT_CACHE_DATAMART
+from utils.chat_handler import handle_chat_response
+from utils.thread_handler import load_threads_list, create_new_thread, save_thread, load_thread, rename_thread
+
 from ai_agent_v2 import DataAnayticsAssistant
 
 # ✅ 3자 패키지
-from loguru import logger
 import streamlit as st
 import pyautogui
 
@@ -40,10 +39,6 @@ def initialize_session_state():
     if "loaded_mart_data" not in st.session_state:
         st.session_state.loaded_mart_data = {}
 
-    # ✅ ConversationBufferMemory를 사용하여 이전 대화 기록 저장
-    if "memory" not in st.session_state:
-        st.session_state.memory = ConversationBufferMemory(return_messages=True)
-
     initial_states = {
         "show_popover": True,
         "messages": [{"role": "assistant", "content": "안녕하세요! AI 분석 어시스턴트입니다. 무엇이든 물어보세요!"}]
@@ -62,7 +57,7 @@ def apply_custom_styles():
             /* 사이드바 기본 너비 설정 */
             [data-testid="stSidebar"] {
                 min-width: 330px !important;
-                max-width: 500px !important;
+                max-width: 800px !important;
             }
             
             /* 사이드바 리사이즈 핸들 스타일 */
@@ -103,6 +98,53 @@ def apply_custom_styles():
             .stMarkdown { font-size: 16px; }
             .reference-doc { font-size: 12px !important; }
             table { font-size: 12px !important; }
+            
+            /* 데이터프레임 스타일 수정 */
+            .dataframe {
+                font-size: 12px !important;
+                white-space: nowrap !important;  /* 텍스트 줄바꿈 방지 */
+                text-align: left !important;
+            }
+            
+            /* 데이터프레임 셀 스타일 */
+            .dataframe td, .dataframe th {
+                min-width: 100px !important;  /* 최소 너비 설정 */
+                max-width: 200px !important;  /* 최대 너비 설정 */
+                padding: 8px !important;
+                text-overflow: ellipsis !important;
+            }
+            
+            /* 데이터프레임 헤더 스타일 */
+            .dataframe thead th {
+                text-align: left !important;
+                font-weight: bold !important;
+                background-color: #f0f2f6 !important;
+            }
+            
+            /* 채팅 입력란 하단 고정 스타일 */
+            section[data-testid="stChatInput"] {
+                position: fixed !important;
+                bottom: 0 !important;
+                background: white !important;
+                padding: 1rem !important;
+                z-index: 999 !important;
+                width: calc(100% - 350px) !important; /* 사이드바 너비 고려 */
+                left: 350px !important; /* 사이드바 너비에 맞춤 */
+                border-top: 1px solid #ddd !important;
+            }
+            
+            /* 채팅 컨테이너에 하단 여백 추가 (입력란이 메시지를 가리지 않도록) */
+            [data-testid="stChatMessageContainer"] {
+                padding-bottom: 70px !important;
+            }
+            
+            /* 반응형 조정: 사이드바가 접혀있을 때 */
+            @media (max-width: 992px) {
+                section[data-testid="stChatInput"] {
+                    width: 100% !important;
+                    left: 0 !important;
+                }
+            }
         </style>
         """,
         unsafe_allow_html=True
@@ -113,38 +155,66 @@ def close_popover():
     st.session_state["show_popover"] = False
     pyautogui.hotkey("esc")
 
-
+# ✅ 마트 선택/해제 처리
 def handle_mart_selection(mart):
     """마트 선택/해제 처리"""
+    # 현재 선택된 마트 목록
     current_marts = set(st.session_state.get("selected_data_marts", []))
     
     if mart in current_marts:
+        ##############################################################
         # 마트 선택 해제
+        ##############################################################
         current_marts.remove(mart)
-        # 메모리에서 데이터 제거
         if mart in st.session_state.loaded_mart_data:
             del st.session_state.loaded_mart_data[mart]
-            print(f"🗑️ 마트 제거됨: {mart}")
+            print(f"🗑️ 마트 비활성화: {mart}")
+            
+            # Assistant 마트 상태 업데이트
+            if hasattr(st.session_state, 'assistant'):
+                if st.session_state.loaded_mart_data:
+                    # 남은 마트들로 업데이트
+                    st.session_state.assistant.set_active_mart(
+                        data_mart=st.session_state.loaded_mart_data,
+                        mart_name=list(st.session_state.loaded_mart_data.keys())
+                    )
+                else:
+                    # 모든 마트가 비활성화된 경우
+                    print("🗑️ 모든 마트가 비활성화되었습니다.")
+                    st.session_state.assistant.active_marts = None
+                    st.session_state.assistant.mart_info = None
     else:
-        # 마트 선택
+        ##############################################################
+        # 마트 선택 및 활성화
+        ##############################################################
         current_marts.add(mart)
-        # 데이터 로드
         data = load_selected_mart(mart)
         if data is not None:
             st.session_state.loaded_mart_data[mart] = data
-            print(f"✅ 마트 로드됨: {mart} (shape: {data.shape})")
+            print(f"✅ 마트 활성화 클릭: {mart} (shape: {data.shape})")
+            
+            # AI Assistant에 활성화된 마트 설정
+            if hasattr(st.session_state, 'assistant'):
+                st.session_state.assistant.set_active_mart(
+                    data_mart=st.session_state.loaded_mart_data,
+                    mart_name=list(st.session_state.loaded_mart_data.keys())
+                )
         else:
             print(f"❌ 마트 로드 실패: {mart}")
     
-    # 현재 메모리에 로드된 전체 마트 상태 출력
-    print("\n📊 현재 메모리 상태:")
-    for mart_name, data in st.session_state.loaded_mart_data.items():
-        print(f"- {mart_name}: {data.shape} rows x {data.shape[1]} columns")
-    print(f"총 로드된 마트 수: {len(st.session_state.loaded_mart_data)}\n")
+    ##############################################################
+    # 현재 활성화된 마트 상태 출력
+    ##############################################################
+    if st.session_state.loaded_mart_data:
+        print("\n📊 현재 활성화된 마트 상태:")
+        for mart_name, data in st.session_state.loaded_mart_data.items():
+            print(f"- {mart_name}: {data.shape} rows x {data.shape[1]} columns")
+        print(f"총 활성화된 마트 수: {len(st.session_state.loaded_mart_data)}\n")
     
     st.session_state.selected_data_marts = list(current_marts)
     st.rerun()
-
+    
+@st.fragment
 def render_mart_selector():
     """마트 선택 UI 렌더링"""
     # 전체 컨테이너를 사용하여 너비 확보
@@ -269,9 +339,42 @@ def render_mart_selector():
                                 """)
                                 st.dataframe(data.head(5), use_container_width=True)
 
-
 def render_sidebar():
     """사이드바 렌더링"""
+    st.sidebar.subheader("📚 대화 관리")
+
+    # ✅ 새로운 쓰레드 생성 버튼
+    if st.sidebar.button("🆕 새 대화 시작", use_container_width=True):
+        new_thread_id = create_new_thread()
+        st.session_state["internal_id"] = new_thread_id  # 세션 상태 업데이트
+        st.session_state["messages"] = []  # 새로운 쓰레드이므로 대화 초기화
+        st.rerun()
+
+    # ✅ 저장된 쓰레드 목록 표시
+    st.sidebar.markdown("### 📝 기존 대화 목록")
+    threads = load_threads_list()
+    
+    for idx, thread in enumerate(threads):
+        # ✅ 버튼 key를 internal_id나 created_at으로 구분
+        button_key = f"thread_{thread['created_at']}"
+        if st.sidebar.button(
+            f"💬 {thread['thread_id']}", 
+            key=button_key,
+            help=f"ID: {thread.get('internal_id', '없음')}"  # 툴팁으로 internal_id 표시
+        ):
+            # print(f"""🔢 [render_sidebar] 쓰레드 목록 표시 시작 (internal_id: {thread["internal_id"]})""")
+            st.session_state["internal_id"] = thread["internal_id"]
+            loaded_thread = load_thread(thread["internal_id"])
+           
+            # 메시지를 세션 상태에 로드
+            if loaded_thread and "messages" in loaded_thread:
+                # print(f"""🔢 [render_sidebar] loaded_thread["messages"] {loaded_thread["messages"]})""")
+                st.session_state["messages"] = loaded_thread["messages"]
+            else:
+                # messages가 없거나 비어있는 경우 기본 메시지 설정
+                st.session_state["messages"] = [{"role": "assistant", "content": "안녕하세요! AI 분석 어시스턴트입니다. 무엇이든 물어보세요!"}]
+            st.rerun()
+
     # 문서 관리 섹션
     st.sidebar.subheader("📚 문맥 관리")
     
@@ -345,165 +448,123 @@ def render_sidebar():
     else:
         st.sidebar.info("등록된 문서가 없습니다.")
 
-def handle_chat_response(assistant, query):
-    """채팅 응답 처리 (기존 질문과 AI 응답을 기억)"""
-    try:
-        with st.spinner("🔍 답변을 생성 중..."):
-            
-            print(f'----------------------------------------------------------------------------------------------------------------')
-            print(f'----------------------------------------------------------------------------------------------------------------')
-            print(f'----------------------------------------------------------------------------------------------------------------')
-            print(f'----------------------------------------------------------------------------------------------------------------')
-            print(f'----------------------------------------------------------------------------------------------------------------')
-            print(f"🔍 질문시각: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            
-            selected_marts = st.session_state.get("selected_data_marts", [])
-            memory = st.session_state.setdefault("memory", ConversationBufferMemory(return_messages=True))
-            all_processed_data_info = st.session_state.get("processed_data_info", {})
-
-            processed_data_info = {mart: info for mart, info in all_processed_data_info.items() if mart in selected_marts}
-            previous_context = memory.load_memory_variables({}).get("history", "")
-
-            # 문맥 정보 생성
-            full_query = f"사용자의 이전 대화 기록을 참고하여 답변하세요.\n\n{previous_context}\n\n질문: {query}" if previous_context else query
-
-            result = assistant.ask(full_query, processed_data_info)
-            print(f"🏃🏿‍➡️ 결과: {result}")
-            response = result.get("general_response") or result.get("knowledge_response") or result.get("messages", "응답을 생성할 수 없습니다.")
-
-            # 대화 기록 업데이트
-            memory.chat_memory.add_user_message(query)
-            memory.chat_memory.add_ai_message(response)
-            st.session_state.memory = memory
-
-            # UI 업데이트
-            st.session_state.setdefault("messages", []).append({"role": "user", "content": query})
-            st.session_state["messages"].append({"role": "assistant", "content": response})
-
-            return response
-
-    except Exception as e:
-        st.error(f"❌ 오류 발생: {traceback.format_exc()}")
-        return None
-
-# def handle_chat_response(assistant, query):
-#     """채팅 응답 처리 (기존 질문과 AI 응답을 기억)"""
-#     try:
-#         with st.spinner("🔍 답변을 생성 중..."):
-#             print(f'----------------------------------------------------------------------------------------------------------------')
-#             print(f'----------------------------------------------------------------------------------------------------------------')
-#             print(f'----------------------------------------------------------------------------------------------------------------')
-#             print(f'----------------------------------------------------------------------------------------------------------------')
-#             print(f'----------------------------------------------------------------------------------------------------------------')
-#             print(f"🔍 질문시각: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-#             # 데이터프레임 선택 여부 확인
-#             selected_marts = st.session_state.get("selected_data_marts", [])
-
-#             # 메모리 초기화 및 가져오기
-#             memory = st.session_state.setdefault("memory", ConversationBufferMemory(return_messages=True))
-            
-#             all_processed_data_info = st.session_state.get("processed_data_info", {})
-#             processed_data_info = {}
-#             for mart, info in all_processed_data_info.items():
-#                 if mart in selected_marts:
-#                     processed_data_info[mart] = info
-
-#             print(f"🔍 현재 선택된 마트: {selected_marts}")
-#             print(f"🔍 현재 선택된 마트의 정보: {processed_data_info.keys()}")
-
-#             # 이전 대화 기록 가져오기
-#             previous_context = memory.load_memory_variables({}).get("history", "이전 대화 기록이 없습니다.")
-
-#             # 데이터 마트 정보 캐싱 (선택된 마트가 있을 때만)
-#             if "llm_context_cached" not in st.session_state and selected_marts:
-#                 mart_context = []
-#                 for df_name in selected_marts:
-#                     if df_name in processed_data_info:
-#                         df_info = processed_data_info[df_name]
-#                         mart_info = f"## 데이터프레임: {df_name}##\n"
-#                         mart_info += df_info[["컬럼명", "데이터 타입", "인스턴스(예제)", "컬럼설명"]].to_markdown(index=False)
-#                         mart_context.append(mart_info)
-#                 print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@mart_contxt@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
-#                 print(mart_context)
-#                 # if mart_context:  # 마트 컨텍스트가 있을 때만 캐싱
-#                 #     cache_prompt = PROMPT_CACHE_DATAMART.format(mart_context='\n\n'.join(mart_context))
-#                 #     assistant.ask(cache_prompt)
-#                 #     st.session_state["llm_context_cached"] = True
-
-#             # 이전 대화 기록을 자연어로 변환
-#             chat_history = ""
-#             if previous_context != "이전 대화 기록이 없습니다.":
-#                 for msg in previous_context:
-#                     if msg.type == 'human':
-#                         chat_history += f"사용자: {msg.content}\n"
-#                     elif msg.type == 'ai':
-#                         chat_history += f"어시스턴트: {msg.content}\n"
-
-#             # 최종 프롬프트 생성
-#             if not chat_history:
-#                 full_query = f"{query}"
-#             else :
-#                 full_query = f"""사용자의 이전 대화 기록을 바탕으로 문맥을 유지하며 답변해주세요.\n**이전 대화 기록:**\n{chat_history}\n**사용자 질문:** {query}"""
-
-#             # LLM 호출 및 응답 처리
-#             result = assistant.ask(full_query)
-#             print(f"🔍 답변: {result}")
-#             if "general_response" in result:
-#                 response = result["general_response"]
-#             if "knowledge_response" in result:
-#                 response = result["knowledge_response"]
-#             else:
-#                 response = result["messages"][-1].content
-
-#             # 대화 기록 업데이트
-#             memory.save_context({"input": query}, {"output": response})
-#             st.session_state.memory = memory
-
-#             # UI 업데이트
-#             st.session_state["messages"].extend([
-#                 {"role": "user", "content": query},
-#                 {"role": "assistant", "content": response}
-#             ])
-
-#             # st.markdown(response)
-#             return response
-
-    # except Exception as e:
-    #     st.error(f"❌ 답변 생성 중 오류 발생: {traceback.format_exc()}")
-    #     return None
-
-
+@st.fragment
 def render_chat_interface():
-    """채팅 인터페이스 렌더링"""
+    """채팅 인터페이스 렌더링 (각 출력 영역별 타이틀 추가)"""
     for message in st.session_state["messages"]:
         with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+            
+            # ✅ 1. 일반 텍스트 메시지 출력 (질문 및 일반 답변)
+            if "content" in message and message["content"]:
+                if message["role"] == "assistant":
+                    if message["content"] != "안녕하세요! AI 분석 어시스턴트입니다. 무엇이든 물어보세요!":
+                        st.markdown("💬 **응답**")
+                    st.markdown(message["content"])
+                else:
+                    # st.markdown("❓ **질문**")
+                    st.write(message["content"])
 
+            # ✅ 2. 실행된 코드 출력
+            if "validated_code" in message and message["validated_code"]:
+                st.markdown("""
+                    ##### 🔢 실행된 코드
+                """)  
+                st.code(message["validated_code"].split("```python")[1].split("```")[0], language="python")
+
+            # ✅ 3. 분석 결과 (테이블)
+            if "analytic_result" in message and message["analytic_result"]:
+                st.divider()
+                st.markdown("""
+                    ### 📑 분석 결과
+                """, )                
+                if isinstance(message["analytic_result"], dict):
+                    for key, value in message["analytic_result"].items():
+                        st.markdown(f"#### {key}")
+                        if isinstance(value, pd.DataFrame):
+                            if value.shape[0] <= 10:
+                                st.table(value)
+                            else:
+                                st.dataframe(value.head(50))
+                        else:
+                            st.write(value)
+                else:
+                    df_result = pd.DataFrame(message["analytic_result"])
+                    if df_result.shape[0] <= 10:
+                        st.table(df_result)
+                    else:
+                        st.dataframe(df_result.head(50))
+
+            # ✅ 4. 차트 출력
+            if "chart_filename" in message:
+                if message["chart_filename"]:
+                    st.divider()
+                    st.markdown("""
+                        ### 📑 분석 차트
+                    """)
+                    st.image(message["chart_filename"])
+                else:
+                    if "q_category" in message and message["q_category"] == "Analytics":
+                        st.warning("📉 차트가 생성되지 않았습니다.")
+
+            # ✅ 5. 인사이트 출력
+            if "insights" in message and message["insights"]:
+                st.divider()
+                st.markdown("""
+                    ### 📑 분석 인사이트
+                """)
+                st.markdown(message["insights"])
+
+            # # ✅ 6. 리포트 다운로드 버튼 개선 (파일명 동적 설정)
+            # if "report_filename" in message and message["report_filename"]:
+            #     report_file = message["report_filename"]
+            #     with open(report_file, "rb") as f:
+            #         report_bytes = f.read()
+                
+            #     st.markdown("📑 **리포트 다운로드**")
+            #     st.download_button(
+            #         label="📥 분석 리포트 다운로드 (Excel)",
+            #         data=report_bytes,
+            #         file_name=Path(report_file).name,  # 🔹 파일명을 동적으로 설정
+            #         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            #     )
+            # ✅ 6. 리포트 텍스트 출력
+            if "report" in message and message["report"]:
+                st.divider()
+                st.markdown("""
+                    ### 📑 분석 리포트
+                """)
+                st.markdown(message["report"])
+
+
+    # ✅ 사용자 입력 필드 추가
     if query := st.chat_input("질문을 입력해주세요."):
-        st.session_state["messages"].append({"role": "user", "content": query})
+        
+        # 사용자가 처음 질문을 할 때 쓰레드 생성
+        if "internal_id" not in st.session_state or st.session_state["internal_id"] == "새 대화":
+            st.session_state["internal_id"] = create_new_thread()
+            st.session_state["messages"] = []  # 새로운 쓰레드이므로 대화 초기화
+
+        user_message = {"role": "user", "content": query}
+        st.session_state.setdefault("messages", []).append(user_message)
+
         with st.chat_message("user"):
-            st.markdown(query)
+            st.write(query)
+            
+        with st.spinner("🔍 답변을 생성 중..."):
+            # ✅ 채팅 응답 처리
+            response_data = handle_chat_response(
+                st.session_state['assistant'], 
+                query,
+                internal_id=st.session_state["internal_id"]
+            )
 
-        with st.chat_message("assistant"):
-            if response := handle_chat_response(st.session_state.assistant, query):
-                st.markdown(response)  # ✅ 직접 출력 (messages 리스트에는 handle_chat_response에서 추가됨)
+        st.session_state["messages"].append(response_data)
 
+        # ✅ 대화 이력을 쓰레드에 저장
+        # print(f"""🔢 대화 이력을 쓰레드에 저장 대화 이력을 쓰레드에 저장 대화 이력을 쓰레드에 저장\n {st.session_state["messages"]}""")
+        save_thread(st.session_state["internal_id"], st.session_state["messages"])
 
-def load_processed_data_info():
-    """사전에 분석된 데이터 정보 로드"""
-    if "processed_data_info" not in st.session_state:
-        if not os.path.exists(PROCESSED_DATA_PATH):
-            st.error("⚠️ 데이터 분석 결과 파일이 존재하지 않습니다. 먼저 마트를 지정해주세요.")
-            return None
-        else:
-            # 모든 시트 로드
-            st.session_state["processed_data_info"] = pd.read_excel(PROCESSED_DATA_PATH, sheet_name=None)
-            print(f"✅ 사전 분석된 데이터 마트 목록(메모리 로드 이전): {list(st.session_state['processed_data_info'].keys())}")
-
-    return st.session_state["processed_data_info"]
-
-# ✅ Streamlit 실행 시 데이터 로드
-processed_data_info = load_processed_data_info()
+        st.rerun()  # UI 새로고침
 
 
 
@@ -515,20 +576,23 @@ def main():
         layout='wide'
     )
     
+    # ✅ 세션 상태 초기화
     initialize_session_state()
+
+    # ✅ 커스텀 스타일 적용
     apply_custom_styles()
+
+    # ✅ 마트 선택 UI 렌더링
+    render_mart_selector()
+    
+    # ✅ 사이드바 렌더링 (문서 관리 포함)
+    render_sidebar()
     
     # OpenAI API Key 검증
     if not (openai_api_key := os.getenv('OPENAI_API_KEY')):
         st.warning("⚠️ OpenAI API Key가 설정되지 않았습니다. 환경 변수를 확인하세요.")
         return
 
-    # 마트 선택 UI 렌더링
-    render_mart_selector()
-    
-    # 사이드바 렌더링 (문서 관리 포함)
-    render_sidebar()
-    
     # 벡터스토어 초기화
     if "vectorstore" not in st.session_state:
         with st.spinner("🔄 문맥을 불러오는 중..."):
@@ -540,7 +604,7 @@ def main():
     # AI Assistant 초기화
     if "assistant" not in st.session_state:
         with st.spinner("🤖 AI Agent를 로드하는 중..."):
-            st.session_state.assistant = DataAnayticsAssistant(openai_api_key, )
+            st.session_state.assistant = DataAnayticsAssistant(openai_api_key,  )
     
     render_chat_interface()
 

@@ -71,9 +71,9 @@ def main():
         vectorstore = st.session_state["vectorstore"]
 
     # ✅ LangGraph 기반 AI Assistant 초기화
-    if "assistant" not in st.session_state:
+    if "mart_assistant" not in st.session_state:
         with st.spinner("🤖 AI Agent를 로드하는 중..."):
-            st.session_state.assistant = AIAnalysisAssistant(vectorstore, openai_api_key)
+            st.session_state.mart_assistant = AIAnalysisAssistant(vectorstore, openai_api_key)
 
 
     # ✅ 문맥과 API Key가 정상적으로 등록된 경우 채팅 활성화
@@ -98,10 +98,10 @@ def main():
             st.markdown(query)
 
         with st.chat_message("assistant"):
-            assistant = st.session_state.assistant
+            mart_assistant = st.session_state.mart_assistant
             try:
                 with st.spinner("🔍 답변을 생성 중..."):
-                    result = assistant.ask(query)
+                    result = mart_assistant.ask(query)
                     # print(f"🔍 result: {result}")
                     # response = result['generation']\
                     response = result["messages"][-1].content
