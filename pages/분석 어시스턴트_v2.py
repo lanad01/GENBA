@@ -1,15 +1,10 @@
 # ✅ 기본 라이브러리
 from datetime import datetime
 import os
-import math
 import pandas as pd
 import time
-import json
-import traceback
 from glob import glob
 from pathlib import Path
-
-# ✅ LangChain 관련 모듈
 
 # ✅ 내부 유틸리티 모듈
 from utils.vector_handler import get_text, get_text_chunks, load_vectorstore, load_document_list, save_document_list, get_vectorstore, rebuild_vectorstore_without_document    
@@ -24,6 +19,8 @@ import streamlit as st
 import pyautogui
 
 PROCESSED_DATA_PATH = "../output/stage1/processed_data_info.xlsx"
+DOCUMENT_LIST_PATH = "../../documents/analysis"
+VECTOR_DB_ANSS_PATH = "../../vectordb/analysis"
 
 # 상수 정의
 CONSTANTS = {
@@ -39,6 +36,17 @@ def initialize_session_state():
     if "loaded_mart_data" not in st.session_state:
         st.session_state.loaded_mart_data = {}
 
+        
+    # OpenAI API Key 검증
+    if not (openai_api_key := os.getenv('OPENAI_API_KEY')):
+        st.warning("⚠️ OpenAI API Key가 설정되지 않았습니다. 환경 변수를 확인하세요.")
+        return
+    
+    # AI Assistant 초기화
+    if "assistant" not in st.session_state:
+        with st.spinner("🤖 AI Agent를 로드하는 중..."):
+            st.session_state['assistant'] = DataAnayticsAssistant(openai_api_key)
+    
     initial_states = {
         "show_popover": True,
         "messages": [{"role": "assistant", "content": "안녕하세요! AI 분석 어시스턴트입니다. 무엇이든 물어보세요!"}]
@@ -135,7 +143,7 @@ def apply_custom_styles():
             
             /* 채팅 컨테이너에 하단 여백 추가 (입력란이 메시지를 가리지 않도록) */
             [data-testid="stChatMessageContainer"] {
-                padding-bottom: 70px !important;
+                padding-bottom: 30px !important;
             }
             
             /* 반응형 조정: 사이드바가 접혀있을 때 */
@@ -146,6 +154,18 @@ def apply_custom_styles():
                 }
             }
         </style>
+        <script>
+        // 스크롤을 자동으로 아래로 이동
+        function scrollToBottom() {
+            var chatContainer = document.querySelector('[data-testid="stChatMessageContainer"]');
+            if (chatContainer) {
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+            }
+        }
+        
+        // Streamlit이 로드될 때 스크롤을 맨 아래로 이동
+        setTimeout(scrollToBottom, 500);
+        </script>
         """,
         unsafe_allow_html=True
     )
@@ -390,23 +410,23 @@ def render_sidebar():
         if st.sidebar.button("📥 문서 등록", use_container_width=True):
             with st.spinner("⏳ 문서를 처리하는 중..."):
                 try:
-                    files_text = get_text(uploaded_files)
+                    files_text = get_text(uploaded_files, document_list_path=DOCUMENT_LIST_PATH)
                     text_chunks = get_text_chunks(files_text)
                     
                     # 기존 vectorstore 로드 또는 새로 생성
-                    if os.path.exists("./vectordb"):
-                        vectorstore = load_vectorstore()
+                    if os.path.exists(VECTOR_DB_ANSS_PATH):
+                        vectorstore = load_vectorstore(db_path = VECTOR_DB_ANSS_PATH)
                         vectorstore.add_documents(text_chunks)
                     else:
                         vectorstore = get_vectorstore(text_chunks)
                     
-                    vectorstore.save_local("./vectordb")
+                    vectorstore.save_local(VECTOR_DB_ANSS_PATH)
                     
                     # 문서 목록 업데이트
-                    document_list = load_document_list()
+                    document_list = load_document_list(document_list_path=DOCUMENT_LIST_PATH)
                     new_documents = [file.name for file in uploaded_files]
                     document_list.extend(new_documents)
-                    save_document_list(list(set(document_list)))
+                    save_document_list(document_list_path=DOCUMENT_LIST_PATH, document_list=list(set(document_list)))
                     
                     st.sidebar.success("✅ 문서 등록이 완료되었습니다!")
                     time.sleep(1)
@@ -420,7 +440,7 @@ def render_sidebar():
     st.sidebar.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
     st.sidebar.markdown("##### 📑 등록된 문서 목록")
     
-    document_list = load_document_list()
+    document_list = load_document_list(document_list_path=DOCUMENT_LIST_PATH)
     if document_list:
         for doc in document_list:
             cols = st.sidebar.columns([0.85, 0.15])
@@ -437,7 +457,7 @@ def render_sidebar():
                         # vectorstore 재구축
                         if rebuild_vectorstore_without_document(doc):
                             document_list.remove(doc)
-                            save_document_list(document_list)
+                            save_document_list(document_list_path=DOCUMENT_LIST_PATH, document_list=list(set(document_list)))
                             st.toast(f"🗑️ '{doc}' 문서가 삭제되었습니다.")
                             time.sleep(1)
                             st.rerun()
@@ -452,6 +472,7 @@ def render_sidebar():
 def render_chat_interface():
     """채팅 인터페이스 렌더링 (각 출력 영역별 타이틀 추가)"""
     for message in st.session_state["messages"]:
+        print(f"🔢 [render_chat_interface] message: {message}") 
         with st.chat_message(message["role"]):
             
             # ✅ 1. 일반 텍스트 메시지 출력 (질문 및 일반 답변)
@@ -587,25 +608,16 @@ def main():
     
     # ✅ 사이드바 렌더링 (문서 관리 포함)
     render_sidebar()
-    
-    # OpenAI API Key 검증
-    if not (openai_api_key := os.getenv('OPENAI_API_KEY')):
-        st.warning("⚠️ OpenAI API Key가 설정되지 않았습니다. 환경 변수를 확인하세요.")
-        return
+
 
     # 벡터스토어 초기화
     if "vectorstore" not in st.session_state:
         with st.spinner("🔄 문맥을 불러오는 중..."):
-            if not (vectorstore := load_vectorstore()):
+            if not (vectorstore := load_vectorstore(db_path = VECTOR_DB_ANSS_PATH)):
                 st.warning("⚠️ 문맥이 등록되지 않았습니다. 먼저 문서를 등록해주세요.")
                 return
             st.session_state["vectorstore"] = vectorstore
 
-    # AI Assistant 초기화
-    if "assistant" not in st.session_state:
-        with st.spinner("🤖 AI Agent를 로드하는 중..."):
-            st.session_state.assistant = DataAnayticsAssistant(openai_api_key,  )
-    
     render_chat_interface()
 
 if __name__ == '__main__':

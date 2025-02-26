@@ -14,7 +14,7 @@ from langchain.embeddings import HuggingFaceEmbeddings
 from langchain_openai import OpenAIEmbeddings
 
 # ✅ AI Assistant LangGraph Class Import
-from utils.ai_agent import AIAnalysisAssistant  # ai_agent.py에 해당 클래스 정의
+from utils.mart_agent import AIAnalysisAssistant  # ai_agent.py에 해당 클래스 정의
 
 warnings.filterwarnings('ignore')
 

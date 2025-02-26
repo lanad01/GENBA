@@ -28,7 +28,7 @@ from utils.vector_handler import load_vectorstore
 matplotlib.rcParams['font.family'] = 'Malgun Gothic'
 matplotlib.rcParams['axes.unicode_minus'] = False
 
-
+VECTOR_DB_BASE_PATH = "./vectordb"
 PROCESSED_DATA_PATH = "../output/stage1/processed_data_info.xlsx"
 MAX_RETRIES = 3
 
@@ -255,7 +255,7 @@ class DataAnayticsAssistant:
         print("\n📚 [handle_knowledge] 지식 기반 질문 처리")
 
         # FAISS 벡터스토어 로드
-        vectorstore = load_vectorstore()
+        vectorstore = load_vectorstore(db_path=VECTOR_DB_BASE_PATH)
         if vectorstore is None:
             print("❌ 벡터스토어를 로드할 수 없습니다. FAISS 인덱스를 확인하세요.")
             return Command(update={"knowledge_response": "관련된 정보를 찾을 수 없습니다."}, goto=END)

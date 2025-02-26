@@ -95,7 +95,7 @@ def sanitize_message_for_json(message):
 def save_thread(internal_id, response_data):
     """특정 쓰레드의 대화 이력을 저장"""
     # print(f"🧵 [save_thread] 쓰레드 저장 시작 (세션: {internal_id})")
-    print(f"🧵 [save_thread] 쓰레드 저장 시작 (messages: \n{response_data})")
+    # print(f"🧵 [save_thread] 쓰레드 저장 시작 (messages: \n{response_data})")
     # print(f"🧵 [save_thread] 쓰레드 저장 시작 (type(response_data): {type(response_data)})")
     thread_path = os.path.join(THREADS_DB_PATH, f"{internal_id}.json")
     
@@ -103,7 +103,7 @@ def save_thread(internal_id, response_data):
     normalized_res = []
     request_summary = None
     for msg in response_data:
-        
+
         # 튜플이나 None 등의 유효하지 않은 메시지 형식 건너뛰기
         if not isinstance(msg, dict):
             continue

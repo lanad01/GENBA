@@ -6,8 +6,10 @@
 config.py
 
 # Streamlit 벡터 데이터베이스 폴더 제외
-vectordb/
+vector_db_session/
+vectordb_/
 __pycache__/
 output/
 
 *.log
+*.db

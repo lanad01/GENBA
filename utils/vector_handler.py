@@ -17,61 +17,66 @@ from langchain.document_loaders import (
     JSONLoader,
     CSVLoader
 )
-from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
 load_dotenv()
 
 VECTOR_DB_SESSION_PATH = "./vector_db_session"
 VECTOR_DB_BASE_PATH = "./vectordb"
 
-
-def load_vectorstore():
-    if os.path.exists(VECTOR_DB_BASE_PATH):
+def load_vectorstore(db_path):
+    if os.path.exists(db_path):
         embeddings = OpenAIEmbeddings(
             model="text-embedding-3-large",
             openai_api_key=os.getenv("OPENAI_API_KEY")
         )
         try:
-            return FAISS.load_local(VECTOR_DB_BASE_PATH, embeddings, allow_dangerous_deserialization=True)
+            return FAISS.load_local(db_path, embeddings, allow_dangerous_deserialization=True)
         except Exception as e:
             print(f"⚠️ 벡터스토어 로드 중 오류 발생: {e}")
             return None
     return None
 
 
-def get_text(docs):
+def get_text(docs, document_list_path):
     """문서 텍스트 추출"""
     doc_list = []
     for doc in docs:
-        file_name = f'../documents/{doc.name}'
-        with open(file_name, "wb") as file:
+        # document_list_path를 Path 객체로 변환하여 파일 경로 생성
+        file_path = Path(document_list_path) / doc.name
+        
+        # 디렉토리가 없으면 생성
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # 파일 저장
+        with open(file_path, "wb") as file:
             file.write(doc.getvalue())
 
-        if file_name.endswith('.pdf'):
-            loader = PyPDFLoader(file_name)
+        # 파일 타입에 따른 처리
+        if file_path.suffix == '.pdf':
+            loader = PyPDFLoader(str(file_path))
             documents = loader.load_and_split()
-        elif file_name.endswith('.docx'):
-            loader = Docx2txtLoader(file_name)
+        elif file_path.suffix == '.docx':
+            loader = Docx2txtLoader(str(file_path))
             documents = loader.load_and_split()
-        elif file_name.endswith('.pptx'):
-            loader = UnstructuredPowerPointLoader(file_name)
+        elif file_path.suffix == '.pptx':
+            loader = UnstructuredPowerPointLoader(str(file_path))
             documents = loader.load_and_split()
-        elif file_name.endswith('.json'):
-            loader = JSONLoader(file_path=file_name, jq_schema='.[]', text_content=False)
+        elif file_path.suffix == '.json':
+            loader = JSONLoader(file_path=str(file_path), jq_schema='.[]', text_content=False)
             documents = loader.load()
-        elif file_name.endswith('.csv'):
-            loader = CSVLoader(file_name, encoding='utf-8')
+        elif file_path.suffix == '.csv':
+            loader = CSVLoader(str(file_path), encoding='utf-8')
             documents = loader.load()
-        elif file_name.endswith('.xlsx'):
-            df = pd.read_excel(file_name)
+        elif file_path.suffix == '.xlsx':
+            df = pd.read_excel(file_path)
             documents = []
             for _, row in df.iterrows():
                 content = f"테이블명: {row['테이블명']}, 컬럼명: {row['컬럼명']}, 컬럼한글명: {row['컬럼한글명']}, 설명: {row['컬럼설명']}, 데이터 타입: {row['DATATYPE']}"
-                documents.append(Document(page_content=content, metadata={"source": file_name}))
-        elif file_name.endswith('.txt'):
-            with open(file_name, "r", encoding="utf-8") as f:
+                documents.append(Document(page_content=content, metadata={"source": str(file_path)}))
+        elif file_path.suffix == '.txt':
+            with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
-            documents = [Document(page_content=content, metadata={"source": file_name})]
+            documents = [Document(page_content=content, metadata={"source": str(file_path)})]
         
         doc_list.extend(documents)
     return doc_list
@@ -84,10 +89,10 @@ def get_text_chunks(text):
     )
     return text_splitter.split_documents(text)
 
-def rebuild_vectorstore_without_document(doc_to_remove):
+def rebuild_vectorstore_without_document(doc_to_remove, document_list_path):
     """특정 문서를 제외하고 vectorstore 재구축"""
     try:
-        document_list = load_document_list()
+        document_list = load_document_list(document_list_path=document_list_path)
         if doc_to_remove not in document_list:
             return False
             
@@ -150,29 +155,24 @@ def rebuild_vectorstore_without_document(doc_to_remove):
         print(f"❌ Vectorstore 재구축 중 오류 발생: {e}")
         return False
     
-    
-    
-def load_document_list():
+def load_document_list(document_list_path):
     """저장된 문서 목록 로드"""
     try:
-        with open("./document_list.json", "r", encoding="utf-8") as f:
+        with open(f"{document_list_path}/document_list.json", "r", encoding="utf-8") as f:
             return json.load(f)
     except FileNotFoundError:
         return []
 
-
-def save_document_list(document_list):
+def save_document_list(document_list_path, document_list):
     """문서 목록 저장"""
-    with open("./document_list.json", "w", encoding="utf-8") as f:
+    with open(f'{document_list_path}/document_list.json', "w", encoding="utf-8") as f:
         json.dump(list(set(document_list)), f, ensure_ascii=False, indent=2)
       
-        
 def get_vectorstore(text_chunks):
     """벡터스토어 생성"""
     embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
     vectordb = FAISS.from_documents(text_chunks, embeddings)
     return vectordb
-
 
 def get_vector_db_path(thread_id):
     """세션 ID 기반으로 개별 벡터DB 경로 생성"""
@@ -222,41 +222,8 @@ AI 응답: {response.get("content", "응답 없음")}
     except Exception as e:
         print(f"❌ [save_chat_to_vector_db] 벡터DB 저장 중 오류 발생: {e}")
 
-
-def summarize_retrieved_documents(filtered_results, query):
-    """검색된 문서를 LLM을 활용하여 요약"""
-    if not filtered_results:
-        return ""
-
-    document_texts = "\n\n".join([
-        f"[유사도: {score:.2f}]\n{doc.page_content}" 
-        for doc, score in filtered_results
-    ])
-
-    # LLM을 사용하여 문서 요약
-    prompt = f"""
-다음은 이전 대화 내역에서 현재 질문 "{query}"와 관련성이 높은 부분들입니다. 이를 참고하여 다음 지침에 따라 요약해주세요:
-
-1. 현재 질문에 직접적으로 관련된 정보를 우선적으로 추출하세요.
-2. 코드 블록과 그 설명은 온전히 보존하세요.
-3. 유사도 점수가 높은 내용에 더 큰 가중치를 두세요.
-4. 정보를 다음 형식으로 구조화하세요:
-- 핵심 개념/용어 설명
-- 관련 코드 예시
-- 주요 인사이트/팁
-5. 기술적 정확성을 유지하면서 중복 정보는 제거하세요.
-6. 최신 대화 내용을 더 관련성 높게 처리하세요.
-
-{document_texts}
-    """
-    openai_api_key = os.getenv("OPENAI_API_KEY")
-    llm = ChatOpenAI(model="gpt-4o", openai_api_key=openai_api_key, temperature=0.0)
-    summarized_result = llm.invoke(prompt)
-    return summarized_result.content.strip()
-
-
 def search_similar_questions(internal_id, query, top_k=5, similarity_threshold=0.7):
-    """벡터DB에서 사용자의 질문과 유사한 질문 검색"""
+    """해당 쓰레드의 질문-답변 이력이 쌓여있는 벡터DB에서 사용자의 현재 질문과 유사한 질문 검색"""
     vectorstore = initialize_vector_store(internal_id)  # 세션별 벡터스토어 로드
     
     # 🔎 유사도 점수와 함께 검색 실행
@@ -306,7 +273,7 @@ def search_similar_questions(internal_id, query, top_k=5, similarity_threshold=0
     
     # 조정된 점수로 상위 결과 선택
     filtered_results.sort(key=lambda x: x[1], reverse=True)
-    filtered_results = filtered_results[:3]  # 상위 top_k개만 유지
+    filtered_results = filtered_results[:1]  # 상위 1개만 유지
     
     # 결과가 있는 경우에만 컨텍스트 생성
     if filtered_results:
@@ -316,9 +283,9 @@ def search_similar_questions(internal_id, query, top_k=5, similarity_threshold=0
         ])
     else:
         retrieved_context = ""
-    retrieved_context = summarize_retrieved_documents(filtered_results, query)
+    # retrieved_context = summarize_retrieved_documents(filtered_results, query, model)
     
-    return retrieved_context
+    return filtered_results
 
 
 # def search_similar_questions(internal_id, query, top_k=2, similarity_threshold=0.7):
