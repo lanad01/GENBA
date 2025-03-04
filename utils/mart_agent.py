@@ -1,5 +1,6 @@
 import os, sys
 from datetime import datetime
+import traceback
 
 from IPython.display import display, Image
 import pandas as pd
@@ -8,18 +9,22 @@ from pydantic import BaseModel
 from uuid import uuid4
 import matplotlib.pyplot as plt
 import matplotlib
-import operator
 
 from langgraph.graph import StateGraph, END, START
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 from langgraph.types import Command
-from langchain.vectorstores import FAISS
+from langchain_community.vectorstores import FAISS
 from langchain.schema import Document
 
 from utils.with_postgre import PostgresDB
 from utils.get_suggestions import get_suggestions
 from prompt.prompt_agency import PromptAgency
+
+# 표준 라이브러리
+import json
+from glob import glob
+from pathlib import Path
 
 schema_name = "biz"
 num_db_return = 20
@@ -42,7 +47,7 @@ class State(TypedDict):
 
 
 class Router(BaseModel):
-    next: Literal['SQL_Builder', 'Chart_Builder', 'Insight_Builder', 'Replier', 'Report_Builder', 'General_Query_Handler', '__end__']
+    next: Literal['SQL_Builder', 'Chart_Builder', 'Insight_Builder', 'Replier', 'General_Query_Handler', '__end__']
 
 
 class SQLQuery(BaseModel):
@@ -220,7 +225,7 @@ class MartAssistant:
             print("🌀 [Chart_Builder] 차트 생성 진행")
         else:
             print("🌀 [Chart_Builder] 차트 생성 건너뜀")
-            return Command(update={"chart_filename": None}, goto="Report_Builder")
+            return Command(update={"chart_filename": None}, goto=END)
         
         prompt = self.prompts.get_chart_builder_prompt()
         dataframe_text = state.get("dataframe", "No dataframe generated.") 
@@ -242,92 +247,13 @@ class MartAssistant:
             exec(modified_code, globals())
             print(f"📈 [create_chart] 차트 코드 수행 성공 및 이미지 저장 완료: ../img/{filename}")
             plt.close()
-            return Command(update={"chart_filename": filename}, goto="Report_Builder")
+            return Command(update={"chart_filename": filename}, goto=END)
         except Exception as e:
             print(f"📈 [create_chart] 차트 코드 실행 중 오류 발생: {e}")
             plt.close()
             return Command(update={"chart_filename": None}, goto="__end__")
         
         
-
-    def report_builder(self, state):
-        print("📝 [Report_builder] 시작")
-        prompt = self.prompts.get_report_builder_prompt()
-
-        dataframe_text = state.get("dataframe", "No dataframe generated.") 
-        insights_text = state.get("insights", "No insights generated.")
-        chart_filename = state.get("chart_filename", "No charts included.")
-        report_chain = prompt | self.llm
-
-        report_content = report_chain.invoke({
-            "question":  state["messages"][0].content,
-            "dataframe": dataframe_text,
-            "insights": insights_text,
-            "chart_filename": chart_filename,
-        }).content
-
-        # 생성 코드를 추출
-        if "```python" in report_content:
-            modified_code = report_content.split("```python")[-1].split("```")[0]
-        else:
-            print("Error: 'generated_code' key not found in report_content")
-            modified_code = None
-
-        # 예외처리를 위한 시도 횟수 설정
-        retry_attempts = 0
-        max_retries = 1
-        success = False
-
-        while retry_attempts <= max_retries and not success:
-            try:
-                if modified_code:
-                    print("📝 [Report_builder] 코드 생성:\n", modified_code)
-                    if not os.path.exists('../output'): # 'output' 디렉토리 존재 여부 확인 및 생성
-                        os.makedirs('../output')
-                    exec(modified_code, globals())
-                    success = True  # 코드 실행 성공
-                else:
-                    print("📝 [Report_builder] No code to execute.")
-                    return Command(update={"report_filename": "failed"}, goto="__end__")
-                
-            except Exception as e:
-                print(f"🛑 [Report_builder]  코드 실행 중 오류 발생: {e}")
-                if retry_attempts < max_retries:
-                    print("🔄 오류 수정 후 재시도 중...")
-                    # 오류 메시지를 기반으로 LLM에 수정 요청
-                    error_prompt = self.prompts.get_error_fix_prompt()
-                    fix_chain = error_prompt | self.llm
-                    fix_response = fix_chain.invoke({
-                        "error_message": str(e),
-                        "original_code": modified_code
-                    }).content
-
-                    if "```python" in fix_response:
-                        modified_code = fix_response.split("```python")[-1].split("```")[0]
-                        print("🔧 수정된 코드:\n", modified_code)
-                        exec(modified_code, globals())
-                        success = True  # 코드 실행 성공
-                    else:
-                        print("Error: 'fixed_code' key not found in fix_response")
-                        return Command(update={"report_filename": "failed"}, goto="__end__")
-                else:
-                    print("❌ 재시도 후에도 오류 발생. 보고서 생성을 보류합니다.")
-                    return Command(update={"report_filename": "failed"}, goto="__end__")
-                retry_attempts += 1
-
-        if success:
-            print("📝 [Report_Builder] 보고서 생성 완료.")
-            report_status = "success"
-        else:
-            print("📝 [Report_Builder] 보고서 생성 실패.")
-            report_status = "failed"
-
-        return Command(update={
-            "messages": [AIMessage(content="성공적으로 생성되었습니다.")],
-            "report_filename": report_status
-        }, goto=END)
-
-
     def build_graph(self):
         workflow_subgraph_sqlbuilder = StateGraph(State)
         workflow_subgraph_sqlbuilder.add_node("retrieve_documents", self.retrieve_documents)
@@ -360,7 +286,6 @@ class MartAssistant:
         workflow.add_node("SQL_Builder", subgraph_sqlbuilder)
         workflow.add_node("Insight_Builder", self.insight_builder)
         workflow.add_node("Chart_Builder", self.chart_builder)
-        workflow.add_node("Report_Builder", self.report_builder)
 
         workflow.set_entry_point("Supervisor")
         workflow.add_edge("General_Query_Handler", END)
@@ -370,21 +295,12 @@ class MartAssistant:
             "Insight_Builder",
             self.route_after_insight_builder,
             {
-                "Report_Builder": "Report_Builder",   # 차트가 필요 있으면 Chart_Builder로
-                "Chart_Builder": "Chart_Builder"      # 차트가 필요 없으면 Supervisor로
+                "Chart_Builder": "Chart_Builder",      # 차트가 필요 없으면 Supervisor로
+                END: END
             },
         )
 
-        workflow.add_conditional_edges(
-            "Chart_Builder",
-            self.route_after_chart_builder,
-            {
-                "Report_Builder": "Report_Builder",   # 차트가 필요 있으면 Chart_Builder로
-                END : END
-            },
-        )
-
-        workflow.add_edge("Report_Builder", END)
+        workflow.add_edge("Chart_Builder", END)
 
         self.app = workflow.compile()
 
@@ -441,29 +357,13 @@ class MartAssistant:
         Returns:
             str: 다음 실행할 노드의 이름
         """
-        print("➡️ [route_after_insight_builder] 전체 데이터 실행 후 경로 결정")
         decision = state.get("chart_decision", "").strip().lower()
+        print(f"➡️ [route_after_insight_builder] 차트 생성 여부 판단: {decision}")
         
         if 'yes' not in decision:
             print("➡️ [route_after_insight_builder] 보고서 생성 단계로 진행")
-            return "Report_Builder"
+            return END
         else :
             print("➡️ [route_after_insight_builder] 차트 생성 단계로 진행")
             return "Chart_Builder"
         
-    def route_after_chart_builder(self, state: State) -> str:
-        """차트 빌더 후 다음 단계를 결정하는 라우터
-        
-        Returns:
-            str: 다음 실행할 노드의 이름
-        """
-        print("➡️ [route_after_chart_builder] 전체 데이터 실행 후 경로 결정")
-        decision = state.get("chart_decision", "").strip().lower()
-        
-        if 'yes' not in decision:
-            print("➡️ [route_after_chart_builder] 보고서 생성 단계로 진행")
-            return "Report_Builder"
-        else :
-            print("➡️ [route_after_chart_builder] 차트 생성 단계로 진행")
-            return END
-

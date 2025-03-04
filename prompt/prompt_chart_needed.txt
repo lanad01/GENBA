@@ -1,2 +1,0 @@
-Based on the dataset and insights provided, determine if a chart visualization would be useful. Consider if visual representation would enhance understanding of the data patterns. 
-Respond with 'yes' or 'no'.

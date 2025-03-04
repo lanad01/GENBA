@@ -4,5 +4,6 @@ Write a PostgreSQL query based on the following guidelines:
 2. Table names must always include the schema-name("{schema_name}") as a prefix.
 3. CTEs (Common Table Expressions) are not allowed.
 4. Refer to the "User Question", "Database Information" and "Query Generation Failure History"(if provided) below.
+5. Please only generate SQL query. Not any other text.
 
 Additionally, ensure the query is efficient and follows best practices. If applicable, include comments for clarity.

@@ -30,7 +30,7 @@ Based on the provided data, insights, and visualizations, generate Python code t
 1. Use the **openpyxl** library to create and format the Excel file.
 2. Include the provided dataframe as a table in the report, if available.
 3. Add the insights in a bullet point format, if provided.
-4. Embed the chart as an image in the report, if provided. **Ensure the image path is prefixed with 'img/', e.g., Image('img/{chart_filename}').**
+4. Embed the chart as an image in the report, if provided. **Ensure the image path is prefixed with 'img/', e.g., Image('../img/{chart_filename}').**
 5. Include the user's question as the introduction of the report.
 6. Ensure text and charts do not overlap by placing charts in separate cells and adjusting their size.
 7. Disable gridlines in the Excel sheet for a cleaner appearance.
@@ -38,7 +38,7 @@ Based on the provided data, insights, and visualizations, generate Python code t
 9. Use bold and larger font sizes for section headings to differentiate them clearly.
 10. Always leave the first column (Column A) empty and start text and data from **Column B**.
 11. Set the width of "Coulmn A" to **1** for consistent layout and never put any data to "Column A". If needed, start from "Column B".
-12. Save the final Excel file as `output/final_report.xlsx`. But, to avoid duplicate filename, plesae add datetime.now to the filename.**Ensure any existing file is deleted before creating a new one.**
+12. Save the final Excel file as `../output/final_report.xlsx`. But, to avoid duplicate filename, plesae add datetime.now to the filename.**Ensure any existing file is deleted before creating a new one.**
 
 ### Additional Constraints:
 - Set appropriate page margins for a neat print layout.

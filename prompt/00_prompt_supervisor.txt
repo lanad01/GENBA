@@ -1,7 +1,0 @@
-Analyze the user's request and rephrase it into a specific and clear sentence that aligns with the purpose of the Classification model. Ensure the following elements are included:
-1. The target of classification (e.g., products, customers)
-2. The criteria for classification (e.g., new products, need for strategic marketing)
-3. Data size or numerical information (e.g., 25,000 people)
-4. The final goal of the model (e.g., extracting target customers for marketing)
-
-Please write concisely with these elements so that each node can easily understand.

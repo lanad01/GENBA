@@ -1,0 +1,51 @@
+{
+  "thread_id": "Missing Values Ratio",
+  "created_at": "1816e08a-0643-44d4-8f14-c9813f1bfff2",
+  "internal_id": "temp_KSW_20250226_1744",
+  "messages": [
+    {
+      "role": "assistant",
+      "content": "안녕하세요! AI 분석 어시스턴트입니다. 무엇이든 물어보세요!"
+    },
+    {
+      "role": "user",
+      "content": "데이터의 컬럼별 결측치 비율을 계산하고 시각화해 주세요."
+    },
+    {
+      "role": "assistant",
+      "content": "분석이 완료되었습니다! 아래 결과를 확인해주세요.",
+      "validated_code": "```python\nimport pandas as pd\nimport matplotlib.pyplot as plt\n\n# 컬럼별 결측치 비율 계산\nmissing_ratio = df.isnull().mean().round(2)\n\n# 시각화\nplt.figure(figsize=(12, 8))\nmissing_ratio.plot(kind='bar')\nplt.title('Missing Values Ratio by Column')\nplt.xlabel('Columns')\nplt.ylabel('Missing Ratio')\nplt.xticks(rotation=90)\nplt.tight_layout()\nplt.show()\n\n# 결과 저장\nanalytic_results = {\n    'missing_ratio': missing_ratio\n}\n\nprint(analytic_results['missing_ratio'])\n```",
+      "chart_filename": "../img/chart_20250227110005.png",
+      "insights": "1. 주요 발견사항\n   - 데이터셋의 대부분의 컬럼은 결측치가 없으나, 'CB신용평점' 컬럼에서 88%의 높은 결측치 비율이 발견되었습니다. 이는 해당 컬럼의 데이터가 거의 대부분 누락되어 있음을 의미합니다.\n\n2. 특이점\n   - 'CB신용평점' 컬럼의 결측치 비율이 매우 높아, 이 컬럼의 데이터가 분석에 활용되기 어려울 수 있습니다. 다른 컬럼들은 결측치가 거의 없거나 전혀 없는 상태입니다.\n\n3. 추천 사항\n   - 'CB신용평점' 컬럼의 높은 결측치 비율을 고려하여, 이 컬럼을 분석에서 제외하거나, 결측치를 대체할 수 있는 방법(예: 평균, 중앙값 대체 또는 예측 모델을 통한 대체)을 고려해야 합니다.\n   - 결측치가 없는 다른 컬럼들을 활용하여 분석을 진행하고, 'CB신용평점'의 결측치가 분석 결과에 미치는 영향을 최소화할 수 있는 전략을 수립하는 것이 좋습니다.\n   - 추가적으로, 'CB신용평점'의 결측치가 발생한 원인을 조사하여 데이터 수집 과정에서의 문제점을 파악하고, 향후 데이터 수집 시 개선할 수 있는 방안을 마련하는 것이 필요합니다.",
+      "report": "1. 요약  \n데이터셋의 'CB신용평점' 컬럼에서 88%의 결측치가 발견되었습니다.\n\n2. 분석 방법  \n컬럼별 결측치 비율을 계산하고 시각화하였습니다.\n\n3. 주요 발견사항  \n'CB신용평점' 컬럼의 결측치 비율이 매우 높아 분석에 어려움이 있습니다.\n\n4. 결론 및 제언  \n'CB신용평점'을 제외하거나 대체 방법을 고려하여 분석을 진행하세요."
+    },
+    {
+      "role": "user",
+      "content": "위에서 뽑아준 결과에서 결측치 비율 기준 Top10 컬럼을 알려줘."
+    },
+    {
+      "role": "assistant",
+      "content": "❌ 활성화된 마트가 없습니다. 먼저 마트를 활성화해주세요.",
+      "validated_code": null,
+      "chart_filename": null,
+      "insights": null,
+      "report": null
+    },
+    {
+      "role": "user",
+      "content": "위에서 뽑아준 결과에서 결측치 비율 기준 Top10 컬럼을 알려줘."
+    },
+    {
+      "role": "assistant",
+      "content": "분석이 완료되었습니다! 아래 결과를 확인해주세요.",
+      "validated_code": "```python\nmissing_ratios = df.isnull().mean().sort_values(ascending=False).head(10).round(2)\nanalytic_results = {'missing_ratios': missing_ratios}\nprint(missing_ratios)\n```",
+      "chart_filename": "../img/chart_20250227110825.png",
+      "insights": "1. 주요 발견사항\n   - 데이터셋에서 결측치 비율이 높은 상위 10개 컬럼은 다음과 같습니다:\n     1. 당월보험료자동대출잔액: 92%\n     2. CB신용평점: 88%\n     3. CB신용등급: 85%\n     4. 직업위험등급코드: 71%\n     5. 전사최초계약경과월수: 68%\n     6. 전사최종계약경과월수: 68%\n     7. 운전코드명: 45%\n     8. 누적보험금지급건수: 43%\n     9. 누적중도보험금지급금액: 43%\n     10. 누적해약환급금지급금액: 43%\n\n2. 특이점\n   - '당월보험료자동대출잔액' 컬럼의 결측치 비율이 92%로 매우 높습니다. 이는 해당 데이터가 대부분의 샘플에서 수집되지 않았거나, 특정 조건에서만 기록되는 데이터일 가능성이 있습니다.\n   - 'CB신용평점'과 'CB신용등급'의 결측치 비율이 각각 88%와 85%로 높아, 신용 관련 데이터의 수집이 제한적이었음을 시사합니다.\n   - '직업위험등급코드'의 결측치 비율이 71%로 높아, 직업 관련 정보의 수집이 불완전할 수 있습니다.\n\n3. 추천 사항\n   - 결측치 비율이 높은 컬럼에 대해 데이터 수집 프로세스를 검토하고, 필요한 경우 데이터 수집 방식을 개선하여 결측치를 줄이는 방안을 고려해야 합니다.\n   - 결측치가 많은 컬럼은 분석에 포함할지 여부를 신중히 결정해야 하며, 필요시 대체 방법(예: 평균 대체, 예측 모델 기반 대체 등)을 적용할 수 있습니다.\n   - 특히, '당월보험료자동대출잔액'과 같은 결측치 비율이 매우 높은 컬럼은 분석에서 제외하거나, 결측치 자체가 의미를 가질 수 있는지 검토해야 합니다.\n   - 신용 관련 데이터의 결측치가 높은 점을 고려하여, 신용 정보를 보완할 수 있는 외부 데이터 소스를 탐색하는 것도 고려할 수 있습니다.",
+      "report": "1. 요약  \n데이터셋의 결측치 비율이 높은 상위 10개 컬럼을 분석했습니다.\n\n2. 분석 방법  \n결측치 비율을 기준으로 상위 10개 컬럼을 선정했습니다.\n\n3. 주요 발견사항  \n'당월보험료자동대출잔액'의 결측치 비율이 92%로 가장 높습니다.\n\n4. 결론 및 제언  \n결측치 비율이 높은 컬럼의 데이터 수집 방식을 개선해야 합니다."
+    }
+  ],
+  "active_marts": [
+    "cust_enroll_history",
+    "cust_intg"
+  ]
+}

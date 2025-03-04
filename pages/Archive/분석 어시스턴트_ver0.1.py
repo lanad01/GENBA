@@ -15,7 +15,7 @@ from langchain_openai import OpenAIEmbeddings
 # ✅ 내부 유틸리티 모듈
 from utils.mart_agent import AIAnalysisAssistant
 from utils.vector_handler import get_text, get_text_chunks, load_vectorstore, load_document_list, save_document_list, get_vectorstore, rebuild_vectorstore_without_document    
-from utils.mart_handler import get_available_marts, load_selected_mart
+from genba.src.utils.pages_handler import get_available_marts, load_selected_mart
 
 # ✅ 3자 패키지
 from loguru import logger

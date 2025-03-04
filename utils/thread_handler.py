@@ -3,8 +3,17 @@ import json
 import uuid
 import streamlit as st
 from datetime import datetime
+from utils.vector_handler import delete_thread_vectorstore
+from pymongo.mongo_client import MongoClient
+from pymongo.server_api import ServerApi
+
 # ✅ 쓰레드 저장 경로 설정
 THREADS_DB_PATH = "./threads"
+
+uri = "mongodb+srv://swkwon:1q2w3e$r@cluster0.3rvbn.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+client = MongoClient(uri, server_api=ServerApi('1'))
+db = client["chat_history"]
+collection = db["conversations"]
 
 def create_new_thread():
     """새로운 쓰레드 생성"""
@@ -52,15 +61,21 @@ def load_threads_list():
     
     for file in os.listdir(THREADS_DB_PATH):
         if file.endswith(".json"):
-            with open(os.path.join(THREADS_DB_PATH, file), "r", encoding="utf-8") as f:
+            file_path = os.path.join(THREADS_DB_PATH, file)
+            # 파일의 최종 수정 시간 가져오기
+            modified_time = os.path.getmtime(file_path)
+            
+            with open(file_path, "r", encoding="utf-8") as f:
                 thread_data = json.load(f)
                 threads.append({
                     "thread_id": thread_data["thread_id"],
                     "created_at": thread_data["created_at"],
-                    "internal_id": thread_data["internal_id"]
+                    "internal_id": thread_data["internal_id"],
+                    "modified_at": modified_time  # 파일 수정 시간 추가
                 })
 
-    return sorted(threads, key=lambda x: x["created_at"], reverse=True)  # 최신순 정렬
+    # 파일 수정 시간 기준으로 정렬
+    return sorted(threads, key=lambda x: x["modified_at"], reverse=True)
 
 def load_thread(thread_id):
     """특정 쓰레드의 대화 기록 불러오기"""
@@ -101,9 +116,9 @@ def save_thread(internal_id, response_data):
     
     # 저장할 메시지 형식 정규화
     normalized_res = []
-    request_summary = None
+    request_summary = "new_chat"  # 기본값으로 "new_chat" 설정
+    
     for msg in response_data:
-
         # 튜플이나 None 등의 유효하지 않은 메시지 형식 건너뛰기
         if not isinstance(msg, dict):
             continue
@@ -119,19 +134,47 @@ def save_thread(internal_id, response_data):
                 normalized_msg.update({
                     "validated_code": msg.get("validated_code"),
                     "chart_filename": msg.get("chart_filename"),
+                    "analytic_results": msg.get("analytic_results"),
                     "insights": msg.get("insights"),
                     "report": msg.get("report")
                 })
-            request_summary = msg.get("request_summary", request_summary)
+            # request_summary가 "new_chat"일 때만 업데이트
+            if request_summary == "new_chat" and "request_summary" in msg:
+                request_summary = msg.get("request_summary")
     
         normalized_res.append(normalized_msg)
-
+    
+    # 현재 활성화된 마트 정보 저장
+    active_marts = st.session_state.get("analysis_selected_data_marts", [])
+    
     thread_data = {
         "thread_id": request_summary,
         "created_at": str(uuid.uuid4()),
         "internal_id": internal_id,
-        "messages": normalized_res
+        "messages": normalized_res,
+        "active_marts": active_marts  # 활성화된 마트 정보 추가
     }
 
     with open(thread_path, "w", encoding="utf-8") as f:
         json.dump(thread_data, f, ensure_ascii=False, indent=2)
+
+def delete_thread(internal_id):
+    """스레드 삭제"""
+    try:
+        # 1. 스레드 JSON 파일 삭제
+        thread_path = os.path.join("./threads", f"{internal_id}.json")
+        if os.path.exists(thread_path):
+            os.remove(thread_path)
+            print(f"✅ 스레드 JSON 파일 삭제 완료: {internal_id}")
+            
+        # 2. 벡터DB 삭제
+        delete_thread_vectorstore(internal_id)
+        
+        # 3. MongoDB에서 스레드 데이터 삭제
+        collection.delete_many({"internal_id": internal_id})
+        print(f"✅ MongoDB 데이터 삭제 완료: {internal_id}")
+        
+        return True
+    except Exception as e:
+        print(f"❌ 스레드 삭제 중 오류 발생: {e}")
+        return False

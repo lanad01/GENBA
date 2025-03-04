@@ -6,11 +6,11 @@ from pathlib import Path
 
 # 서드파티 라이브러리
 import pandas as pd
-from langchain.embeddings import OpenAIEmbeddings
+from langchain_community.embeddings import OpenAIEmbeddings
 from langchain.schema import Document
-from langchain.vectorstores import FAISS
+from langchain_community.vectorstores import FAISS
 from langchain.text_splitter import RecursiveCharacterTextSplitter # type: ignore
-from langchain.document_loaders import (
+from langchain_community.document_loaders import (
     PyPDFLoader,
     Docx2txtLoader, 
     UnstructuredPowerPointLoader,
@@ -34,6 +34,7 @@ def load_vectorstore(db_path):
         except Exception as e:
             print(f"⚠️ 벡터스토어 로드 중 오류 발생: {e}")
             return None
+    print(f"⚠️ 해당 경로에 벡터스토어가 존재하지 않습니다: {db_path}")
     return None
 
 
@@ -183,10 +184,8 @@ def initialize_vector_store(thread_id):
     vector_db_path = get_vector_db_path(thread_id)
     
     if os.path.exists(vector_db_path):
-        # print(f"🔢 [initialize_vector_store] 벡터DB 로드 시작 (세션: {thread_id})")
         return FAISS.load_local(vector_db_path, OpenAIEmbeddings(), allow_dangerous_deserialization=True)
     else:
-        # print(f"🔢 [initialize_vector_store] 벡터DB 초기화 시작 (세션: {thread_id})")
         return FAISS.from_texts([""], OpenAIEmbeddings())
 
 def save_chat_to_vector_db(internal_id, query, response):
@@ -217,8 +216,8 @@ AI 응답: {response.get("content", "응답 없음")}
         vectorstore.add_texts([document_text])
         vector_db_path = os.path.join(VECTOR_DB_SESSION_PATH, f"{internal_id}_vectorstore")
         vectorstore.save_local(vector_db_path)
-
         print(f"✅ 벡터DB 저장 완료 (세션: {internal_id})")
+
     except Exception as e:
         print(f"❌ [save_chat_to_vector_db] 벡터DB 저장 중 오류 발생: {e}")
 
@@ -269,47 +268,22 @@ def search_similar_questions(internal_id, query, top_k=5, similarity_threshold=0
             if content_key:
                 seen_content.add(content_key)
             
-            filtered_results.append((doc, adjusted_score))
+            filtered_results.append((doc, adjusted_score, cosine_sim))
     
     # 조정된 점수로 상위 결과 선택
     filtered_results.sort(key=lambda x: x[1], reverse=True)
     filtered_results = filtered_results[:1]  # 상위 1개만 유지
-    
-    # 결과가 있는 경우에만 컨텍스트 생성
-    if filtered_results:
-        retrieved_context = "\n\n".join([
-            f"[유사도: {score:.2f}]\n{doc.page_content}" 
-            for doc, score in filtered_results
-        ])
-    else:
-        retrieved_context = ""
-    # retrieved_context = summarize_retrieved_documents(filtered_results, query, model)
-    
     return filtered_results
 
-
-# def search_similar_questions(internal_id, query, top_k=2, similarity_threshold=0.7):
-#     """벡터DB에서 사용자의 질문과 유사한 질문 검색"""
-#     vectorstore = initialize_vector_store(internal_id)  # 세션별 벡터스토어 로드
-    
-#     # 🔎 유사도 점수와 함께 검색 실행
-#     search_results = vectorstore.similarity_search_with_score(query, k=top_k)
-    
-#     # 유사도 점수가 threshold를 넘는 결과만 필터링
-#     filtered_results = []
-#     for doc, score in search_results:
-#         # FAISS의 score는 L2 거리이므로 코사인 유사도로 변환 (1 - score/2가 코사인 유사도의 근사값)
-#         cosine_sim = 1 - (score / 2)
-#         if cosine_sim >= similarity_threshold:
-#             filtered_results.append((doc, cosine_sim))
-    
-#     # 결과가 있는 경우에만 컨텍스트 생성
-#     if filtered_results:
-#         retrieved_context = "\n\n".join([
-#             f"[유사도: {score:.2f}]\n{doc.page_content}" 
-#             for doc, score in filtered_results
-#         ])
-#     else:
-#         retrieved_context = ""
-
-#     return retrieved_context
+def delete_thread_vectorstore(internal_id):
+    """스레드의 벡터DB 삭제"""
+    try:
+        vector_db_path = get_vector_db_path(internal_id)
+        if os.path.exists(vector_db_path):
+            import shutil
+            shutil.rmtree(vector_db_path)
+            print(f"✅ 벡터DB 삭제 완료 (스레드: {internal_id})")
+        return True
+    except Exception as e:
+        print(f"❌ 벡터DB 삭제 중 오류 발생: {e}")
+        return False

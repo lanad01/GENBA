@@ -44,8 +44,8 @@ st.write("")
 st.write("")
 st.markdown(f'''
 ## Menu
+👨🏾‍💻 **데이터마트 생성** : 분석용 데이터마트를 생성(SQL) \n
 🤖 **분석 어시스턴트** : 데이터분석을 지원하는 생성형 Assistant \n
-📰 **문맥 등록** : 생성형 Assistant를 위한 문맥 제공
 ''')
 
 

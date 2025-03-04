@@ -39,6 +39,7 @@ class PromptAgency:
     def get_sql_rebuilder_prompt(self):
         return ChatPromptTemplate.from_template("""
         Correct the following SQL query based on the error message provided.
+        Please only generate SQL query. Not any other text.
         
         ### SQL Query:
         {sql_query}

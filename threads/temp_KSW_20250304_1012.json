@@ -1,0 +1,27 @@
+{
+  "thread_id": "Variable Analysis",
+  "created_at": "3dcb47b2-2628-4236-9154-00860df11ce8",
+  "internal_id": "temp_KSW_20250304_1012",
+  "messages": [
+    {
+      "role": "assistant",
+      "content": "안녕하세요! AI 분석 어시스턴트입니다. 무엇이든 물어보세요!"
+    },
+    {
+      "role": "user",
+      "content": "''변액종신CMIP' 컬럼에 대해서 EDA 분석해줘"
+    },
+    {
+      "role": "assistant",
+      "content": "분석이 완료되었습니다! 아래 결과를 확인해주세요.",
+      "validated_code": "```python\n# '변액종신CMIP' 컬럼에 대한 EDA 분석\n\n# 1. 기초 통계량 계산\nbasic_stats = cust_intg['변액종신CMIP'].describe().round(2)\n\n# 2. 결측치 개수 및 비율 계산\nmissing_count = cust_intg['변액종신CMIP'].isnull().sum()\nmissing_ratio = (missing_count / len(cust_intg) * 100).round(2)\n\n# 3. 히스토그램 생성\nhistogram = cust_intg['변액종신CMIP'].plot(kind='hist', bins=50, title='변액종신CMIP Distribution')\n\n# 4. 상위 5개 값 확인\ntop_5_values = cust_intg['변액종신CMIP'].value_counts().head().round(2)\n\n# 5. 상관관계 분석\ncorrelation = cust_intg.corr()['변액종신CMIP'].round(2)\n\n# 결과 저장\nanalytic_results = {\n    'basic_stats': basic_stats,\n    'missing_count': missing_count,\n    'missing_ratio': missing_ratio,\n    'top_5_values': top_5_values,\n    'correlation': correlation\n}\n\n# 출력\nprint(analytic_results)\n```",
+      "chart_filename": "../img/chart_20250304104935.png",
+      "analytic_results": null,
+      "insights": "1. 주요 발견사항\n- '변액종신CMIP' 컬럼의 데이터는 총 120,000개의 관측치로 구성되어 있으며, 결측치는 없습니다.\n- 평균값은 17,322.95이며, 중앙값은 11,925.59로, 데이터가 오른쪽으로 약간 치우쳐져 있음을 시사합니다.\n- 데이터의 최소값은 1.91, 최대값은 213,711.24로, 상당히 넓은 범위를 가지고 있습니다.\n- 상위 25%의 값은 24,156.02 이상이며, 이는 데이터의 상위 25%가 평균보다 훨씬 높은 값을 가지고 있음을 나타냅니다.\n\n2. 특이점\n- '변액종신CMIP'의 상위 5개 빈도 값은 모두 4회 이하로 나타나며, 특정 값에 집중되지 않고 다양한 값을 가지고 있습니다.\n- 다른 변수들과의 상관관계가 매우 낮거나 거의 없는 것으로 나타나, '변액종신CMIP'가 다른 변수들과 독립적으로 분포되어 있음을 알 수 있습니다.\n\n3. 추천 사항\n- '변액종신CMIP'의 분포가 비대칭적이므로, 분석 시 로그 변환이나 다른 정규화 기법을 고려하여 데이터의 분포를 조정할 수 있습니다.\n- 상관관계가 낮은 점을 고려하여, '변액종신CMIP'가 다른 변수들과의 관계를 탐색하기 위해 추가적인 비선형 관계 분석을 수행할 수 있습니다.\n- 데이터의 최대값이 매우 크므로, 이상치가 분석에 미치는 영향을 줄이기 위해 이상치 처리 방법을 고려해야 합니다.",
+      "report": "1. 요약  \n'변액종신CMIP'는 결측치 없이 넓은 범위를 가지며, 비대칭적 분포를 보입니다.\n\n2. 분석 방법  \n기초 통계량, 결측치 분석, 상관관계 분석을 수행했습니다.\n\n3. 주요 발견사항  \n데이터는 오른쪽으로 치우쳐 있으며, 상관관계가 거의 없습니다.\n\n4. 결론 및 제언  \n로그 변환 및 비선형 관계 분석을 통해 추가 인사이트를 도출하세요."
+    }
+  ],
+  "active_marts": [
+    "cust_intg"
+  ]
+}

@@ -1,136 +1,168 @@
 from datetime import datetime
+import threading
 import traceback
 import streamlit as st
 from typing import Dict, Any, Optional, Union
 from langchain.memory import ConversationBufferMemory
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
-
+from langchain.prompts import ChatPromptTemplate
 # 사용자 패키지
 from utils.vector_handler import save_chat_to_vector_db, search_similar_questions
 from utils.thread_handler import rename_thread, save_thread
+from common_txt import logo
+
 # ✅ MongoDB Atlas 연결 설정
 uri = "mongodb+srv://swkwon:1q2w3e$r@cluster0.3rvbn.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 client = MongoClient(uri, server_api=ServerApi('1'))
 db = client["chat_history"]
 collection = db["conversations"]
 
-# ✅ 메모리 저장소 (thread_id별로 관리)
-memory_store = {}
 
-def get_memory(thread_id: str) -> ConversationBufferMemory:
+# ✅ 비동기 저장 함수 (MongoDB, Vector DB, Summarization을 별도 처리)
+def save_chat_data(internal_id, query, response_data, llm):
     """
-    특정 thread_id에 대한 ConversationBufferMemory를 반환.
-    기존 데이터가 있으면 불러오고, 없으면 새로 생성.
-    """
-    if thread_id not in memory_store:
-        memory_store[thread_id] = ConversationBufferMemory(memory_key=f"history_{thread_id}", return_messages=True)
-    
-        # ✅ MongoDB에서 이전 대화 기록 불러오기
-        existing_messages = collection.find({"internal_id": thread_id}).sort("timestamp", 1)  # 시간순 정렬
-        if existing_messages:
-            for document in existing_messages:
-                for msg in document.get("messages", []):
-                    if msg["role"] == "user":
-                        memory_store[thread_id].chat_memory.add_user_message(msg["content"])
-                    elif msg["role"] == "assistant":
-                        memory_store[thread_id].chat_memory.add_ai_message(msg["content"])
-
-    return memory_store[thread_id]
-
-# ✅ 채팅 응답 처리
-def handle_chat_response(
-    assistant: Any,
-    query: str,
-    internal_id: str
-) -> tuple[Optional[Dict[str, Any]], ConversationBufferMemory]:
-    """
-    채팅 응답 처리 (기존 질문과 AI 응답을 기억)
-    
-    Args:
-        assistant: 챗봇 어시스턴트 인스턴스
-        query: 사용자 질문
-        thread_id: 스레드 ID
-
-    Returns:
-        tuple[응답 데이터 딕셔너리, 업데이트된 메모리 객체]
+    UI를 먼저 업데이트한 후, 백그라운드에서 MongoDB 저장, 벡터DB 저장, Summarization을 수행하는 함수.
     """
     try:
-        print(f"🕛 [handle_chat_response] 질문시각: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        start_time = datetime.now()
+        
+        # content만 있는 경우와 분석 결과가 있는 경우를 구분
+        if response_data.get('validated_code') or response_data.get('analytic_result'):
+            base_text = f"""
+validated_code: {response_data.get('validated_code', '')}
+code_result: {response_data.get('analytic_result', '')}
+insights: {response_data.get('insights', '')}
+"""
+        else:
+            base_text = response_data.get('content', '')
 
-        # ✅ thread_id별 memory 가져오기
-        memory = get_memory(internal_id)
+        # ✅ 요약 적용 (대화가 일정 길이를 초과할 경우)
+        if len(str(base_text).split()) < 300:  # 토큰 수가 적으면 요약 필요 없음
+            print(f"💾 요약 필요 없음 | 토큰 수: {len(str(base_text).split())}")
+            summary = base_text
+        else :
+            prompt = ChatPromptTemplate.from_messages([
+            ("system", "다음 대화 및 분석 결과의 핵심 내용을 요약해주세요. 코드는 전부 포함하되, 결과 및 인사이트는 중요한 정보만 포함하고, 불필요한 내용은 제거하세요."),
+            ("user", "{response_data}")
+            ])
+            chain = prompt | llm
+            summary = chain.invoke({"response_data": base_text}).content.strip()
+
+        # ✅ MongoDB 저장 (백그라운드에서 실행)
+        collection.update_one(
+            {"internal_id": internal_id},
+            {
+                "$push": {
+                    "messages": {
+                        "$each": [
+                            {
+                                "role": "user",
+                                "content": query,
+                                "timestamp": datetime.now()
+                            },
+                            {
+                                "role": "assistant",
+                                "content": response_data["content"],
+                                "validated_code": response_data["validated_code"],
+                                "chart_filename": response_data["chart_filename"],
+                                "insights": response_data["insights"],
+                                "report": response_data["report"],
+                                "request_summary": response_data["request_summary"],
+                                "context_summary": summary,  # ✅ 요약된 내용 추가
+                                "timestamp": datetime.now(),
+                            }
+                        ]
+                    }
+                }
+            },
+            upsert=True
+        )
+
+        # ✅ 벡터DB 저장 (백그라운드에서 실행)
+        save_chat_to_vector_db(internal_id, query, response_data)
+
+        end_time = datetime.now()
+        duration = (end_time - start_time).total_seconds()
+        print(f"✅ 백그라운드 저장 완료 - 소요시간: {duration:.2f}초")
+
+    except Exception as e:
+        print(f"❌ 백그라운드 저장 중 오류 발생: {e}")
+        print(f"상세 에러: {traceback.format_exc()}")
+
+
+# ✅ 메모리 저장소 (thread_id별로 관리)
+def get_history(thread_id: str) -> list:
+    """
+    특정 thread_id에 대한 대화 이력을 MongoDB에서 불러옴.
+    query와 context_summary 쌍을 최근 7개만 반환
+    """
+    existing_messages = collection.find(
+        {"internal_id": thread_id}
+    ).sort("timestamp", -1).limit(7)
+    
+    conversation_pairs = []
+    for document in existing_messages:
+        messages = document.get("messages", [])
+        
+        # messages를 2개씩 묶어서 처리 (user + assistant 쌍)
+        for i in range(0, len(messages)-1, 2):
+            user_msg = messages[i]
+            assistant_msg = messages[i+1]
+            
+            if user_msg["role"] == "user" and assistant_msg["role"] == "assistant":
+                conversation_pair = {
+                    "query": user_msg["content"],
+                    "response": assistant_msg.get("context_summary", assistant_msg["content"])
+                }
+                conversation_pairs.append(conversation_pair)
+    
+    # 최근 5개 쌍만 반환 (시간 역순)
+    return conversation_pairs[:5]
+
+
+# ✅ 백그라운드에서 저장을 실행하는 비동기 처리
+def process_chat_response(assistant: Any, query: str, internal_id: str,):
+    """
+    UI를 먼저 업데이트한 후, 백그라운드에서 MongoDB 저장, 벡터DB 저장, Summarization을 실행.
+    """
+    try:
+        print("="*100)
+        print(f"🤵 질문시각: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"🤵 Context Window 처리 시작")
 
         # ✅ 기존 대화 기록 가져오기
-        messages = memory.load_memory_variables({}).get(f"history_{internal_id}", "")
-
-        # 메시지 객체를 읽기 쉬운 대화 형식으로 변환
-        previous_context = ""
-        if messages:
-            for msg in messages:
-                if msg.type == 'human':
-                    previous_context += f"사용자: {msg.content}\n"
-                elif msg.type == 'ai':
-                    previous_context += f"어시스턴트: {msg.content}\n"
-
-        ##########################################################################################
-        # ✅ Context Window 처리
-        # ** 해당 쓰레드의 질문-답변 이력이 쌓여있는 벡터DB에서 사용자의 현재 질문과 유사한 질문 검색
-        ##########################################################################################
-        model = assistant.llm
-        filtered_results = search_similar_questions(internal_id, query)
-        if not filtered_results:
-            return ""
-
-        document_texts = "\n\n".join([
-            f"[유사도: {score:.2f}]\n{doc.page_content}" 
-            for doc, score in filtered_results
-        ])
-
-        # LLM을 사용하여 문서 요약
-        prompt = f"""
-다음은 이전 대화 내역에서 현재 질문 "{query}"와 관련성이 높은 검색된 문서들입니다.
-이를 참고하여 현재 질문과 직접 연결되는 핵심 내용을 요약하세요.
-
-1. 질문과 직접적으로 연결되는 정보만 남기고 불필요한 내용은 제거
-2. 검색된 문서에서 코드가 있다면 그대로 유지
-3. 분석 결과나 중요한 인사이트는 정리해서 포함
-4. 정보를 다음 형식으로 구조화:
-    - 핵심 개념 설명
-    - 관련 코드
-    - 주요 인사이트(3줄 이내)
-
-{document_texts}
-        """
-        summarized_result = model.invoke(prompt).content.strip()
+        chat_history = get_history(thread_id=internal_id)
         
-        ##########################################################################################
-        # ✅ Query Rewriting
-        #  """ 기존 문맥과 검색된 문서를 반영하여 새로운 질문을 생성 """
-        ##########################################################################################
-        # 이전 대화 기록이 없고 검색된 문서도 없으면 원본 질문 그대로 사용
-        if not previous_context or not summarized_result:
-            final_query = query  
-        # 이전 대화 기록이 있고 검색된 문서도 있으면 검색된 문서를 반영하여 새로운 질문을 생성
-        else:
-            prompt = f"""
-다음은 사용자의 이전 대화 기록을 요약한 것입니다.
-이를 참고하여 사용자 질문을 보다 명확하고 완전한 질문으로 변환하세요.
+        # ✅ 전체 대화 문맥 생성
+        context_messages = []
+        for pair in chat_history:  # 여기서 한 번만 뒤집어서 과거->현재 순으로
+            context_messages.extend([
+                f"사용자 질문: {pair['query']}",
+                f"어시스턴트 응답:\n{pair['response']}"
+            ])
+        
+        previous_context = "\n\n".join(context_messages)  # reversed 제거
 
-[검색된 문서 요약]
-{summarized_result}
+        # ✅ LLM 실행 - 전체 컨텍스트와 함께 원본 질문 전달
+        if chat_history:
+            context_query = f"""
+# 📝 이전 대화 내역
+{previous_context}
 
-[사용자의 원래 질문]
+# 🤔 현재 질문
 {query}
+"""
+            print(f"🤵 전체 컨텍스트와 함께 질문 전달")
+        else:
+            context_query = query
+            print("🤵 첫 질문 - 원본 질문 사용")
 
-[재구성된 질문]
-            """
-            final_query = model.invoke(prompt).content.strip()
-
-        print(f"🤵 재구성된 질문:\n{final_query}")
-        result = assistant.ask(final_query)
+        # print(f"🤵 질문: {query}")
+        print(f"🤵 컨텍스트: {context_query}")
+        result = assistant.ask(query, context_query)
         print(f"🤵 결과:\n{result}")
-        
+
         # ✅ UI 렌더링을 위해 답변 결과(result)를 messages 리스트에 데이터 저장
         response_data = {
             "role": "assistant",
@@ -143,7 +175,7 @@ def handle_chat_response(
             "request_summary": result.get("request_summary"),
         }
 
-        # ✅ 일반 텍스트 응답일 경우 처리
+        # ✅ 메인 답변 처리
         if "analytic_result" not in result:
             if "error_message" in result:
                 response_data["content"] = result["error_message"]
@@ -155,38 +187,18 @@ def handle_chat_response(
                     result.get("response", "응답을 생성할 수 없습니다.")
                 )
 
-        # ✅ 메모리에 질문 및 응답 저장 (에러가 없는 경우만)
-        if "error_message" not in response_data:
-            if isinstance(query, str):
-                memory.chat_memory.add_user_message(query)
-            if isinstance(response_data["content"], str):
-                memory.chat_memory.add_ai_message(response_data["content"])
-
-            # ✅ MongoDB에도 대화 이력 저장
-            collection.update_one(
-                {"internal_id": internal_id},
-                {
-                    "$push": {
-                        "messages": {
-                            "$each": [
-                                {"role": "user", "content": query, "timestamp": datetime.now()},
-                                {"role": "assistant", "content": response_data["content"], "timestamp": datetime.now()}
-                            ]
-                        }
-                    }
-                },
-                upsert=True
-            )
-            
-            # ✅ 응답에서 request_summary 확인 및 thread_id 변경
-            if "request_summary" in response_data:
-                rename_thread(internal_id, response_data["request_summary"])
-
-            # ✅ 벡터DB 저장
-            save_chat_to_vector_db(internal_id, query, response_data)
+        # 스레드 생성 및 시작
+        save_thread = threading.Thread(
+            target=save_chat_data, 
+            args=(internal_id, query, response_data, assistant.llm), 
+            daemon=True,
+            name=f"SaveThread-{internal_id}"  # 스레드에 식별 가능한 이름 부여
+        )
+        save_thread.start()
+        print(f"🔄 백그라운드 저장 스레드 시작 - {save_thread.name}")
 
         return response_data
 
     except Exception as e:
-        st.error(f"❌ 오류 발생 [handle_chat_response] : {traceback.format_exc()}")
-        return None, None
+        print(f"❌ 오류 발생: {e}")
+        return {"role": "assistant", "content": f"❌ 오류 발생: {e}"}
