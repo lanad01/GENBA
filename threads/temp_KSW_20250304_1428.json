@@ -1,0 +1,31 @@
+{
+  "thread_id": "Variable Life CMIP Prediction Model",
+  "created_at": "49794380-4228-4701-8121-e061066126fd",
+  "internal_id": "temp_KSW_20250304_1428",
+  "messages": [
+    {
+      "role": "assistant",
+      "content": "안녕하세요! AI 분석 어시스턴트입니다. 무엇이든 물어보세요!"
+    },
+    {
+      "role": "user",
+      "content": "'변액종신CMIP' 예측 모델 만들어줘"
+    },
+    {
+      "role": "assistant",
+      "content": {
+        "error_type": "ModuleNotFoundError",
+        "error_message": "No module named 'xgboost'",
+        "traceback": "Traceback (most recent call last):\n  File \"C:\\Users\\권상우\\GENBA-main\\genba\\src\\utils\\analytic_agent.py\", line 674, in execute_sample_code\n    self._execute_code_with_capture(code_to_execute, exec_globals, is_sample=True)\n  File \"C:\\Users\\권상우\\GENBA-main\\genba\\src\\utils\\analytic_agent.py\", line 1339, in _execute_code_with_capture\n    raise e\n  File \"C:\\Users\\권상우\\GENBA-main\\genba\\src\\utils\\analytic_agent.py\", line 1302, in _execute_code_with_capture\n    exec(code, exec_globals, safe_locals)  # **제한된 네임스페이스에서 실행**\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<string>\", line 8, in <module>\nModuleNotFoundError: No module named 'xgboost'\n"
+      },
+      "validated_code": null,
+      "chart_filename": null,
+      "analytic_results": null,
+      "insights": null,
+      "report": null
+    }
+  ],
+  "active_marts": [
+    "cust_intg"
+  ]
+}

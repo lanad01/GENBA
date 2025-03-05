@@ -1,0 +1,67 @@
+{
+  "thread_id": "Missing Value Ratio Analysis",
+  "created_at": "37b86ac3-3ba6-46ac-b42d-cd8093d5520f",
+  "internal_id": "temp_KSW_20250305_0045",
+  "messages": [
+    {
+      "role": "assistant",
+      "content": "안녕하세요! AI 분석 어시스턴트입니다. 무엇이든 물어보세요!"
+    },
+    {
+      "role": "user",
+      "content": "가입담보명이 '질병사망'인 담보 상품에 가입한 고객들과 그렇지 않은 고객의 차이를 알려주세요."
+    },
+    {
+      "role": "assistant",
+      "content": "분석이 완료되었습니다! 아래 결과를 확인해주세요.",
+      "validated_code": "```python\nimport pandas as pd\n\n# '질병사망' 담보 상품에 가입한 고객과 그렇지 않은 고객을 구분\ndisease_death_customers = cust_enroll_history[cust_enroll_history['가입담보명'] == '질병사망']['고객ID'].unique()\nnon_disease_death_customers = cust_enroll_history[cust_enroll_history['가입담보명'] != '질병사망']['고객ID'].unique()\n\n# 고객 정보를 가져오기 위해 cust_intg 데이터프레임과 병합\ndisease_death_info = cust_intg[cust_intg['고객ID'].isin(disease_death_customers)]\nnon_disease_death_info = cust_intg[cust_intg['고객ID'].isin(non_disease_death_customers)]\n\n# 각 그룹의 통계 정보 계산\ndisease_death_stats = disease_death_info.describe().round(2)\nnon_disease_death_stats = non_disease_death_info.describe().round(2)\n\n# 결과 저장\nanalytic_results = {\n    'disease_death_customers_stats': disease_death_stats.head().round(2),\n    'non_disease_death_customers_stats': non_disease_death_stats.head().round(2)\n}\n\nprint(disease_death_stats)\nprint(non_disease_death_stats)\n```",
+      "chart_filename": "../img/chart_20250305004638.png",
+      "analytic_results": null,
+      "insights": "1. 주요 발견사항\n   - '질병사망' 담보 상품에 가입한 고객들은 평균 CB신용평점이 346.95로, 가입하지 않은 고객들의 평균 CB신용평점 328.07보다 높습니다. 이는 '질병사망' 담보 상품에 가입한 고객들이 상대적으로 신용도가 높은 경향이 있음을 시사합니다.\n   - 두 그룹 모두 평균 보험연령이 비슷하게 나타났으며, '질병사망' 담보 상품에 가입한 고객의 평균 보험연령은 45.92세, 가입하지 않은 고객의 평균 보험연령은 45.49세입니다.\n   - 변액기납입보험료는 '질병사망' 담보 상품에 가입한 고객이 평균 16,586.24원, 가입하지 않은 고객이 평균 17,307.51원으로, 가입하지 않은 고객이 약간 더 높은 경향을 보입니다.\n\n2. 특이점\n   - '질병사망' 담보 상품에 가입한 고객들은 직업위험등급코드 평균이 5.09로, 가입하지 않은 고객들의 평균 4.40보다 높습니다. 이는 '질병사망' 담보 상품에 가입한 고객들이 상대적으로 위험도가 높은 직업군에 속할 가능성이 있음을 나타냅니다.\n   - 두 그룹 모두 방카채널 Affluent 고객여부가 0으로 나타나, 방카채널을 통한 고액 자산가 고객은 거의 없는 것으로 보입니다.\n\n3. 추천 사항\n   - '질병사망' 담보 상품에 가입한 고객들이 신용도가 높은 경향이 있으므로, 이들을 대상으로 한 추가적인 금융 상품 제안이나 크로스셀링 전략을 고려할 수 있습니다.\n   - 직업위험등급이 높은 고객들이 '질병사망' 담보 상품에 가입하는 경향이 있으므로, 이들을 대상으로 한 맞춤형 보험 상품 개발을 검토해 볼 수 있습니다.\n   - 변액기납입보험료가 상대적으로 낮은 '질병사망' 담보 상품 가입 고객들에게 추가적인 보험 상품 업셀링 기회를 모색할 수 있습니다.",
+      "report": "1. 요약  \n'질병사망' 담보 가입 고객은 신용도가 높고 직업위험이 큽니다.\n\n2. 분석 방법  \n가입 여부에 따른 고객 특성 비교 분석을 수행했습니다.\n\n3. 주요 발견사항  \n신용평점, 직업위험도, 변액기납입보험료에서 차이가 나타났습니다.\n\n4. 결론 및 제언  \n고신용 고객 대상 금융상품 제안 및 맞춤형 보험 개발을 권장합니다."
+    },
+    {
+      "role": "user",
+      "content": "제공해준 disease_death_info 고객들의 CMIP 수준을 구간화해서 알려줘요."
+    },
+    {
+      "role": "assistant",
+      "content": "분석이 완료되었습니다! 아래 결과를 확인해주세요.",
+      "validated_code": "```python\nimport pandas as pd\nimport numpy as np\n\n# '질병사망' 담보 상품에 가입한 고객의 정보를 필터링\ndisease_death_customers = cust_enroll_history[cust_enroll_history['가입담보명'] == '질병사망']['고객ID'].unique()\ndisease_death_info = cust_intg[cust_intg['고객ID'].isin(disease_death_customers)]\n\n# CMIP 구간화\nbins = [0, 100, 200, 300, 400, 500, np.inf]\nlabels = ['0-100', '101-200', '201-300', '301-400', '401-500', '500+']\ndisease_death_info['CMIP_구간'] = pd.cut(disease_death_info['CMIP'], bins=bins, labels=labels, right=False)\n\n# CMIP 구간별 고객 수\ncmip_distribution = disease_death_info['CMIP_구간'].value_counts().sort_index()\n\n# 결과 저장\nanalytic_results = {\n    'cmip_distribution': cmip_distribution\n}\n\nprint(cmip_distribution)\n```",
+      "chart_filename": null,
+      "analytic_results": null,
+      "insights": "1. 주요 발견사항\n   - 분석 결과에 따르면, 모든 고객의 CMIP 수준이 500 이상인 구간에 속해 있습니다. 이는 CMIP가 500 이하인 구간에는 고객이 전혀 없음을 의미합니다.\n\n2. 특이점\n   - 일반적으로 CMIP 수준은 다양한 구간에 분포될 것으로 예상되지만, 모든 고객이 500 이상의 CMIP 구간에 속해 있다는 점은 매우 특이합니다. 이는 고객군의 특성이나 데이터 수집 과정에서의 특정한 요인에 의해 발생했을 가능성이 있습니다.\n\n3. 추천 사항\n   - CMIP 수준이 500 이상인 고객들에 대한 추가 분석을 통해 이들이 공통적으로 가지고 있는 특성을 파악하는 것이 필요합니다. 이를 통해 보험 상품의 리스크 관리 및 맞춤형 상품 개발에 활용할 수 있습니다.\n   - 데이터 수집 및 처리 과정에서의 오류 가능성을 점검하여, CMIP 수준이 다양한 구간에 걸쳐 분포될 수 있도록 데이터의 정확성을 검토해야 합니다.\n   - CMIP가 500 이하인 고객군이 존재하지 않는 이유를 파악하기 위해, 고객의 건강 상태, 보험 상품의 특성, 또는 데이터 수집 방법에 대한 심층적인 검토가 필요합니다.",
+      "report": "1. 요약  \n모든 고객의 CMIP 수준이 500 이상으로 나타났습니다.\n\n2. 분석 방법  \nCMIP 수준을 구간별로 분류하여 분포를 분석했습니다.\n\n3. 주요 발견사항  \nCMIP 500 이하 구간에 고객이 전혀 없습니다.\n\n4. 결론 및 제언  \nCMIP 500 이상 고객 특성 분석 및 데이터 정확성 검토 필요."
+    },
+    {
+      "role": "user",
+      "content": "데이터의 컬럼별 결측치 비율을 계산하고 결측비율 상위 10개의 컬럼을 알려줘요."
+    },
+    {
+      "role": "assistant",
+      "content": "분석이 완료되었습니다! 아래 결과를 확인해주세요.",
+      "validated_code": "```python\n# 각 변수별 결측치 비율 확인\nmissing_ratio = cust_intg.isnull().mean().sort_values(ascending=False)\n\n# 결측비율 상위 10개의 컬럼\ntop_10_missing = missing_ratio.head(10)\n\n# 결과 저장\nanalytic_results = {\n    \"missing_ratio\": missing_ratio.round(2),\n    \"top_10_missing\": top_10_missing.round(2)\n}\n\n# 출력\nprint(analytic_results[\"missing_ratio\"])\nprint(analytic_results[\"top_10_missing\"])\n```",
+      "chart_filename": "../img/chart_20250305092233.png",
+      "analytic_results": null,
+      "insights": "1. 주요 발견사항\n   - 데이터 분석 결과, 결측치 비율이 높은 상위 10개의 컬럼은 다음과 같습니다:\n     1. 당월보험료자동대출잔액: 92%\n     2. CB신용평점: 88%\n     3. CB신용등급: 85%\n     4. 직업위험등급코드: 71%\n     5. 전사최초계약경과월수: 68%\n     6. 전사최종계약경과월수: 68%\n     7. 운전코드명: 45%\n     8. 누적보험금지급건수: 43%\n     9. 누적중도보험금지급금액: 43%\n     10. 누적해약환급금지급금액: 43%\n\n2. 특이점\n   - 결측치 비율이 70% 이상인 컬럼이 4개 존재하며, 특히 '당월보험료자동대출잔액'의 경우 결측치 비율이 92%로 매우 높습니다. 이는 해당 컬럼의 데이터가 거의 존재하지 않음을 의미합니다.\n   - 'CB신용평점'과 'CB신용등급'의 결측치 비율이 각각 88%와 85%로 높아, 신용 관련 데이터의 수집에 문제가 있을 가능성이 있습니다.\n\n3. 추천 사항\n   - 결측치 비율이 높은 컬럼들은 데이터 분석 및 모델링에 사용하기 전에 결측치 처리 전략을 수립해야 합니다. 예를 들어, 결측치 비율이 매우 높은 '당월보험료자동대출잔액'은 분석에서 제외하거나, 대체 가능한 다른 변수를 찾는 것이 필요합니다.\n   - 'CB신용평점'과 'CB신용등급'의 경우, 신용 관련 데이터의 수집 과정을 검토하여 데이터 수집의 정확성을 높이는 방안을 고려해야 합니다.\n   - 결측치가 많은 컬럼에 대해 대체 가능한 외부 데이터 소스를 탐색하거나, 결측치를 예측할 수 있는 모델을 개발하는 것도 고려할 수 있습니다.",
+      "report": "1. 요약  \n결측치 비율 상위 10개 컬럼을 분석했습니다.\n\n2. 분석 방법  \n컬럼별 결측치 비율을 계산하여 상위 10개를 추출했습니다.\n\n3. 주요 발견사항  \n'당월보험료자동대출잔액' 등 4개 컬럼의 결측치 비율이 70% 이상입니다.\n\n4. 결론 및 제언  \n결측치 처리 전략 수립 및 데이터 수집 과정 검토가 필요합니다."
+    },
+    {
+      "role": "user",
+      "content": "결측치 대체를 최빈값으로 해주세요."
+    },
+    {
+      "role": "assistant",
+      "content": "분석이 완료되었습니다! 아래 결과를 확인해주세요.",
+      "validated_code": "```python\n# 최빈값으로 결측치 대체\nfor column in cust_intg.columns:\n    if cust_intg[column].isnull().any():\n        mode_value = cust_intg[column].mode()[0]\n        cust_intg[column].fillna(mode_value, inplace=True)\n\n# 결과 저장\nanalytic_results = {\n    \"filled_data\": cust_intg.head().round(2)\n}\n\n# 출력\nprint(analytic_results[\"filled_data\"])\n```",
+      "chart_filename": "../img/chart_20250305093849.png",
+      "analytic_results": null,
+      "insights": "1. 주요 발견사항\n   - 데이터셋의 결측치가 최빈값으로 성공적으로 대체되었습니다. 이는 데이터의 일관성을 유지하고 분석의 정확성을 높이는 데 기여할 것입니다.\n   - 'CB신용평점', 'CB신용등급', '두낫콜여부' 등 여러 변수에서 결측치가 존재했으며, 이들이 최빈값으로 대체되었습니다. 이는 특히 고객의 신용 관련 분석에서 중요한 역할을 할 수 있습니다.\n\n2. 특이점\n   - 'CB신용평점'과 같은 연속형 변수에서도 최빈값으로 대체가 이루어졌습니다. 이는 데이터의 분포에 따라 최빈값이 극단적인 값이 될 수 있어 주의가 필요합니다.\n   - '운전코드명'과 같은 범주형 변수의 경우, 최빈값 대체가 자연스러울 수 있지만, 데이터의 다양성을 감소시킬 수 있습니다.\n\n3. 추천 사항\n   - 최빈값 대체가 적절한지 확인하기 위해 데이터의 분포를 시각화하여 분석하는 것이 좋습니다. 특히 연속형 변수의 경우, 최빈값이 데이터의 대표성을 가지는지 검토해야 합니다.\n   - 결측치 대체 후, 모델링이나 추가 분석을 진행하기 전에 데이터의 품질을 다시 한번 검토하는 것이 중요합니다.\n   - 만약 최빈값 대체가 데이터의 특성을 왜곡할 가능성이 있다면, 다른 대체 방법(예: 평균값, 중앙값 대체 또는 예측 모델 기반 대체)을 고려해볼 수 있습니다.",
+      "report": "1. 요약  \n결측치를 최빈값으로 대체하여 데이터 일관성 확보.\n\n2. 분석 방법  \n결측치가 있는 변수에 대해 최빈값으로 대체 수행.\n\n3. 주요 발견사항  \n결측치 대체로 데이터의 신뢰성과 분석 정확성 향상.\n\n4. 결론 및 제언  \n데이터 분포 시각화로 최빈값 대체의 적절성 검토 필요."
+    }
+  ],
+  "active_marts": [
+    "cust_intg",
+    "cust_enroll_history"
+  ]
+}

@@ -66,6 +66,7 @@ insights: {response_data.get('insights', '')}
                                 "content": response_data["content"],
                                 "validated_code": response_data["validated_code"],
                                 "generated_code": response_data["generated_code"],
+                                "analytic_result": response_data["analytic_result"],
                                 "chart_filename": response_data["chart_filename"],
                                 "insights": response_data["insights"],
                                 "report": response_data["report"],
@@ -85,11 +86,11 @@ insights: {response_data.get('insights', '')}
 
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()
-        print(f"📩 백그라운드 저장 완료 - 소요시간: {duration:.2f}초")
+        print(f"✅ 백그라운드 저장 완료 - 소요시간: {duration:.2f}초")
 
     except Exception as e:
-        print(f"❌ 백그라운드 저장 중 오류 발생: \n{traceback.format_exc()}\n")
-        # print(f"상세 에러: {traceback.format_exc()}")
+        print(f"❌ 백그라운드 저장 중 오류 발생: {e}")
+        print(f"상세 에러: {traceback.format_exc()}")
 
 
 # ✅ 메모리 저장소 (thread_id별로 관리)
@@ -136,7 +137,7 @@ def process_chat_response(assistant: Any, query: str, internal_id: str,):
 
         # ✅ 기존 대화 기록 가져오기
         context = get_history(thread_id=internal_id)
-        print(f"""🤵 컨텍스트 after get_history:\n{"비어있음" if not context else context}""")
+        print(f"🤵 컨텍스트 after get_history:\n{context}")
         result = assistant.ask(query, context)
         print(f"🤵 결과:\n{result}")
 
@@ -157,9 +158,8 @@ def process_chat_response(assistant: Any, query: str, internal_id: str,):
         if "analytic_result" not in result:
             if "error_message" in result:
                 response_data["content"] = result["error_message"]
-                # 에러가 있어도 generated_code가 있으면 포함
-                if "generated_code" in result:
-                    response_data["generated_code"] = result["generated_code"]
+                # st.error(f"⚠️ 오류 발생: {result['error_message']}")
+                pass
             else:
                 response_data["content"] = (
                     result.get("general_response") or 
@@ -181,6 +181,7 @@ def process_chat_response(assistant: Any, query: str, internal_id: str,):
 
     except Exception as e:
         print(f"❌ 오류 발생: {traceback.format_exc()}")
+        # st.error(f"❌ 오류 발생 [handle_chat_response] : {traceback.format_exc()}")
         return { 
             "role": "assistant", 
             "content": f"❌ 실행 도중 오류가 발생했습니다.", 

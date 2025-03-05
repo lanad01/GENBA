@@ -349,24 +349,41 @@ def render_sidebar_chat():
                 if f"{thread_id}_loaded_mart_data" not in st.session_state:
                     st.session_state[f"{thread_id}_loaded_mart_data"] = {}
                 
+
                 # 다른 쓰레드로 전환 
                 st.session_state[f"{thread_id}_show_mart_manager"] = False # 마트 선택 UI 닫기
                 set_page_state(PAGE_NAME, "internal_id", thread_id)
                 loaded_thread = load_thread(thread["internal_id"])
                 if loaded_thread and "messages" in loaded_thread:
-                    set_page_state(PAGE_NAME, "messages", loaded_thread["messages"])
+                    # 메시지 로드 시 DataFrame 객체 처리
+                    messages = loaded_thread["messages"]
+                    print(f"🔢 [render_sidebar_chat] 스레드 전환: {messages}")
+ 
+                    for message in messages:
+                        if "analytic_result" in message and message["analytic_result"]:
+                            # 문자열로 저장된 DataFrame을 다시 DataFrame으로 변환
+                            try:
+                                if isinstance(message["analytic_result"], dict):
+                                    for key, value in message["analytic_result"].items():
+                                        if isinstance(value, list) and len(value) > 0 and isinstance(value[0], dict):
+                                            message["analytic_result"][key] = pd.DataFrame(value)
+                                elif isinstance(message["analytic_result"], list) and len(message["analytic_result"]) > 0:
+                                    message["analytic_result"] = pd.DataFrame(message["analytic_result"])
+                            except Exception as e:
+                                print(f"DataFrame 변환 중 오류: {e}")
+                    
+                    set_page_state(PAGE_NAME, "messages", messages)
                 else:
                     set_page_state(PAGE_NAME, "messages", [{"role": "assistant", "content": CONSTANTS["ASSISTANT_MESSAGE"]}])
                 st.rerun()
         with col2:
             # 삭제 버튼 (현재 활성화된 스레드는 삭제 불가)
-            if not is_active:
-                if st.button("🗑️", key=f"delete_{thread['created_at']}", help="스레드 삭제"):
-                    if delete_thread(thread["internal_id"]):
-                        st.success("스레드가 삭제되었습니다.")
-                        st.rerun()
-                    else:
-                        st.error("스레드 삭제 중 오류가 발생했습니다.")
+            if st.button("🗑️", key=f"delete_{thread['created_at']}", help="스레드 삭제"):
+                if delete_thread(thread["internal_id"]):
+                    st.success("스레드가 삭제되었습니다.")
+                    st.rerun()
+                else:
+                    st.error("스레드 삭제 중 오류가 발생했습니다.")
 
 # sidebar 문서 관리
 def render_sidebar_document():
@@ -462,7 +479,11 @@ def render_chat_interface():
                 continue
 
             with st.chat_message(message["role"]):
-                # ✅ 1. 일반 텍스트 메시지 출력 (질문 및 일반 답변)
+
+                if "error_message" in message:
+                    st.error(f"⚠️ 오류 발생: {message['error_message']}")
+
+                # ✅ 일반 텍스트 메시지 출력 (질문 및 일반 답변)
                 if "content" in message and message["content"]:
                     if message["role"] == "assistant":
                         if message["content"] != "안녕하세요! AI 분석 어시스턴트입니다. 무엇이든 물어보세요!":
@@ -471,12 +492,22 @@ def render_chat_interface():
                     else:
                         st.write(message["content"])
 
-                # ✅ 2. 실행된 코드 출력
+                # ✅ 생성된 코드 출력 (에러가 있을 때만)
+                if "error_message" in message and "generated_code" in message and message["generated_code"]:
+                    st.markdown("""\n##### 🔢 생성된 코드 (에러 발생)\n""")
+                    code_to_display = message["generated_code"]
+                    if "```python" in code_to_display:
+                        code_to_display = code_to_display.split("```python")[1].split("```")[0]
+                    elif "```" in code_to_display:
+                        code_to_display = code_to_display.split("```")[1]
+                    st.code(code_to_display, language="python")
+
+                # ✅ 실행된 코드 출력
                 if "validated_code" in message and message["validated_code"]:
                     st.markdown("""\n##### 🔢 실행된 코드\n""")  
                     st.code(message["validated_code"].split("```python")[1].split("```")[0], language="python")
 
-                # ✅ 3. 분석 결과 (테이블)
+                # ✅ 분석 결과 (테이블)
                 if "analytic_result" in message and message["analytic_result"]:
                     st.divider()
                     st.markdown("""\n##### 📑 분석 결과\n""")                
@@ -497,7 +528,7 @@ def render_chat_interface():
                         else:
                             st.dataframe(df_result.head(50))
 
-                # ✅ 4. 차트 출력
+                # ✅ 차트 출력
                 if "chart_filename" in message:
                     if message["chart_filename"]:
                         st.divider()
@@ -507,13 +538,13 @@ def render_chat_interface():
                         if "q_category" in message and message["q_category"] == "Analytics":
                             st.warning("📉 차트가 생성되지 않았습니다.")
 
-                # ✅ 5. 인사이트 출력
+                # ✅ 인사이트 출력
                 if "insights" in message and message["insights"]:
                     st.divider()
                     st.markdown("""\n##### 📑 분석 인사이트\n""")
                     st.markdown(message["insights"])
 
-                # ✅ 6. 리포트 텍스트 출력
+                # ✅ 리포트 텍스트 출력
                 if "report" in message and message["report"]:
                     st.divider()
                     st.markdown("""

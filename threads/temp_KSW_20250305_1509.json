@@ -1,0 +1,272 @@
+{
+  "thread_id": "Insurance Premium Optimization Strategy",
+  "created_at": "73cfd9cd-c7d5-4cf9-b8e8-5550c4788425",
+  "internal_id": "temp_KSW_20250305_1509",
+  "messages": [
+    {
+      "role": "assistant",
+      "content": "안녕하세요! AI 분석 어시스턴트입니다. 무엇이든 물어보세요!"
+    },
+    {
+      "role": "user",
+      "content": "고객별 보험료를 최적화하는 데이터 기반 전략을 수립할 수 있나요?"
+    },
+    {
+      "role": "assistant",
+      "content": "분석이 완료되었습니다! 아래 결과를 확인해주세요.",
+      "validated_code": "```python\n# 고객별 보험료 최적화를 위한 데이터 기반 전략 수립\n\n# 1. 고객의 보험료 관련 데이터 분석\ncust_intg['총보험료'] = cust_intg['기납입보험료합계'] + cust_intg['미납보험료합계']\ninsurance_premium_data = cust_intg[['고객ID', '총보험료', 'CMIP', 'GA채널CMIP', '자사설계사채널CMIP', '변액CMIP', '저축CMIP']]\n\n# 2. 고객의 보험료 관련 데이터 요약\ninsurance_premium_summary = insurance_premium_data.describe().round(2)\n\n# 3. 고객의 보험료 관련 데이터 상위 5개\ninsurance_premium_head = insurance_premium_data.head().round(2)\n\n# 4. 고객의 보험료 최적화를 위한 전략 수립\n# - 고객의 총 보험료를 기준으로 상위 20% 고객을 대상으로 추가 분석\ntop_20_percent_customers = insurance_premium_data[insurance_premium_data['총보험료'] > insurance_premium_data['총보험료'].quantile(0.8)]\n\n# 5. 상위 20% 고객의 보험료 관련 데이터 요약\ntop_20_percent_summary = top_20_percent_customers.describe().round(2)\n\n# 6. 상위 20% 고객의 보험료 관련 데이터 상위 5개\ntop_20_percent_head = top_20_percent_customers.head().round(2)\n\n# 7. 분석 결과 저장\nanalytic_results = {\n    'insurance_premium_summary': insurance_premium_summary,\n    'insurance_premium_head': insurance_premium_head,\n    'top_20_percent_summary': top_20_percent_summary,\n    'top_20_percent_head': top_20_percent_head\n}\n\nprint(insurance_premium_summary)\nprint(top_20_percent_summary)\n```",
+      "chart_filename": "../img/chart_20250305151006.png",
+      "insights": "1. 주요 발견사항\n- 고객별 평균 총보험료는 약 975,238원이며, CMIP(보험료 수익성 지표)는 평균적으로 955,648원으로 나타났습니다. 이는 대부분의 고객이 보험료를 통해 수익을 창출하고 있음을 시사합니다.\n- 변액보험과 저축보험의 CMIP는 각각 평균 46,779원과 7,786원으로, 변액보험이 저축보험보다 수익성이 높습니다.\n- 상위 20% 고객의 평균 총보험료는 약 2,541,553원으로, 일반 고객 평균보다 약 2.6배 높습니다. 이는 상위 고객이 보험사에 상당한 수익을 기여하고 있음을 보여줍니다.\n\n2. 특이점\n- GA채널과 자사설계사채널을 통한 CMIP는 대부분 0에 가까운 값을 보이고 있습니다. 이는 이 두 채널을 통한 보험 판매가 거의 없거나, 수익성이 낮음을 나타낼 수 있습니다.\n- 상위 20% 고객의 변액보험 CMIP는 최대 372,499원으로, 일반 고객의 최대치인 644,044원보다 낮습니다. 이는 상위 고객이 변액보험보다는 다른 보험 상품에 더 집중하고 있음을 시사합니다.\n\n3. 추천 사항\n- GA채널과 자사설계사채널의 활용도를 높이기 위한 전략이 필요합니다. 이 채널들을 통해 더 많은 고객을 유치하거나, 수익성을 높일 수 있는 방안을 모색해야 합니다.\n- 변액보험의 높은 수익성을 고려하여, 변액보험 상품의 마케팅 및 판매 전략을 강화하는 것이 좋습니다. 특히, 상위 고객에게 변액보험의 장점을 강조하여 추가적인 수익을 창출할 수 있습니다.\n- 상위 20% 고객의 보험료 최적화를 위해, 이들의 보험 상품 포트폴리오를 분석하고 맞춤형 상품을 제안하는 전략을 수립해야 합니다. 이를 통해 고객 만족도를 높이고, 장기적인 고객 관계를 구축할 수 있습니다.",
+      "report": "1. 요약  \n고객별 보험료 최적화를 위한 전략 수립 가능\n\n2. 분석 방법  \n보험료 및 CMIP 데이터 통계 분석\n\n3. 주요 발견사항  \n상위 20% 고객이 높은 수익 기여, 변액보험 수익성 높음\n\n4. 결론 및 제언  \nGA채널 활용도 증대, 변액보험 마케팅 강화 필요",
+      "generated_code": "```python\n# 고객별 보험료 최적화를 위한 데이터 기반 전략 수립\n\n# 1. 고객의 보험료 관련 데이터 분석\ncust_intg['총보험료'] = cust_intg['기납입보험료합계'] + cust_intg['미납보험료합계']\ninsurance_premium_data = cust_intg[['고객ID', '총보험료', 'CMIP', 'GA채널CMIP', '자사설계사채널CMIP', '변액CMIP', '저축CMIP']]\n\n# 2. 고객의 보험료 관련 데이터 요약\ninsurance_premium_summary = insurance_premium_data.describe().round(2)\n\n# 3. 고객의 보험료 관련 데이터 상위 5개\ninsurance_premium_head = insurance_premium_data.head().round(2)\n\n# 4. 고객의 보험료 최적화를 위한 전략 수립\n# - 고객의 총 보험료를 기준으로 상위 20% 고객을 대상으로 추가 분석\ntop_20_percent_customers = insurance_premium_data[insurance_premium_data['총보험료'] > insurance_premium_data['총보험료'].quantile(0.8)]\n\n# 5. 상위 20% 고객의 보험료 관련 데이터 요약\ntop_20_percent_summary = top_20_percent_customers.describe().round(2)\n\n# 6. 상위 20% 고객의 보험료 관련 데이터 상위 5개\ntop_20_percent_head = top_20_percent_customers.head().round(2)\n\n# 7. 분석 결과 저장\nanalytic_results = {\n    'insurance_premium_summary': insurance_premium_summary,\n    'insurance_premium_head': insurance_premium_head,\n    'top_20_percent_summary': top_20_percent_summary,\n    'top_20_percent_head': top_20_percent_head\n}\n\nprint(insurance_premium_summary)\nprint(top_20_percent_summary)\n```",
+      "analytic_result": {
+        "insurance_premium_summary": [
+          {
+            "고객ID": 120000.0,
+            "총보험료": 120000.0,
+            "CMIP": 120000.0,
+            "GA채널CMIP": 120000.0,
+            "자사설계사채널CMIP": 120000.0,
+            "변액CMIP": 120000.0,
+            "저축CMIP": 120000.0
+          },
+          {
+            "고객ID": 43126.17,
+            "총보험료": 975237.65,
+            "CMIP": 955648.3,
+            "GA채널CMIP": 1792.79,
+            "자사설계사채널CMIP": 6243.7,
+            "변액CMIP": 46778.6,
+            "저축CMIP": 7785.63
+          },
+          {
+            "고객ID": 33176.95,
+            "총보험료": 977058.57,
+            "CMIP": 989480.03,
+            "GA채널CMIP": 5388.63,
+            "자사설계사채널CMIP": 11678.93,
+            "변액CMIP": 46511.75,
+            "저축CMIP": 7812.17
+          },
+          {
+            "고객ID": 1.0,
+            "총보험료": 1844.53,
+            "CMIP": 26.49,
+            "GA채널CMIP": 0.0,
+            "자사설계사채널CMIP": 0.0,
+            "변액CMIP": 1.9,
+            "저축CMIP": 0.0
+          },
+          {
+            "고객ID": 14297.25,
+            "총보험료": 296819.75,
+            "CMIP": 268717.29,
+            "GA채널CMIP": 0.0,
+            "자사설계사채널CMIP": 0.0,
+            "변액CMIP": 13466.72,
+            "저축CMIP": 2204.03
+          },
+          {
+            "고객ID": 34112.5,
+            "총보험료": 664924.47,
+            "CMIP": 638263.0,
+            "GA채널CMIP": 0.0,
+            "자사설계사채널CMIP": 0.0,
+            "변액CMIP": 32614.19,
+            "저축CMIP": 5392.44
+          },
+          {
+            "고객ID": 69490.25,
+            "총보험료": 1325497.79,
+            "CMIP": 1311916.0,
+            "GA채널CMIP": 0.0,
+            "자사설계사채널CMIP": 10455.72,
+            "변액CMIP": 65234.91,
+            "저축CMIP": 10803.76
+          },
+          {
+            "고객ID": 100000.0,
+            "총보험료": 9911409.98,
+            "CMIP": 9996683.5,
+            "GA채널CMIP": 67623.44,
+            "자사설계사채널CMIP": 160009.99,
+            "변액CMIP": 644044.31,
+            "저축CMIP": 72621.8
+          }
+        ],
+        "insurance_premium_head": [
+          {
+            "고객ID": 25226,
+            "총보험료": 328708.7,
+            "CMIP": 294788.5,
+            "GA채널CMIP": 0.0,
+            "자사설계사채널CMIP": 0.0,
+            "변액CMIP": 116506.92,
+            "저축CMIP": 8211.44
+          },
+          {
+            "고객ID": 95256,
+            "총보험료": 1798812.55,
+            "CMIP": 1788933.43,
+            "GA채널CMIP": 0.0,
+            "자사설계사채널CMIP": 0.0,
+            "변액CMIP": 129150.26,
+            "저축CMIP": 15752.38
+          },
+          {
+            "고객ID": 14751,
+            "총보험료": 1050240.71,
+            "CMIP": 980961.07,
+            "GA채널CMIP": 0.0,
+            "자사설계사채널CMIP": 0.0,
+            "변액CMIP": 22850.34,
+            "저축CMIP": 11788.36
+          },
+          {
+            "고객ID": 4478,
+            "총보험료": 1195890.97,
+            "CMIP": 1137153.62,
+            "GA채널CMIP": 0.0,
+            "자사설계사채널CMIP": 0.0,
+            "변액CMIP": 23034.59,
+            "저축CMIP": 4637.01
+          },
+          {
+            "고객ID": 100000,
+            "총보험료": 883090.71,
+            "CMIP": 789976.65,
+            "GA채널CMIP": 0.0,
+            "자사설계사채널CMIP": 0.0,
+            "변액CMIP": 52520.8,
+            "저축CMIP": 5421.38
+          }
+        ],
+        "top_20_percent_summary": [
+          {
+            "고객ID": 24000.0,
+            "총보험료": 24000.0,
+            "CMIP": 24000.0,
+            "GA채널CMIP": 24000.0,
+            "자사설계사채널CMIP": 24000.0,
+            "변액CMIP": 24000.0,
+            "저축CMIP": 24000.0
+          },
+          {
+            "고객ID": 42761.31,
+            "총보험료": 2541552.56,
+            "CMIP": 2540098.39,
+            "GA채널CMIP": 1729.43,
+            "자사설계사채널CMIP": 6384.02,
+            "변액CMIP": 46873.9,
+            "저축CMIP": 7842.55
+          },
+          {
+            "고객ID": 33029.76,
+            "총보험료": 1018520.14,
+            "CMIP": 1033136.61,
+            "GA채널CMIP": 5406.85,
+            "자사설계사채널CMIP": 11952.2,
+            "변액CMIP": 46809.76,
+            "저축CMIP": 8003.36
+          },
+          {
+            "고객ID": 10.0,
+            "총보험료": 1540332.59,
+            "CMIP": 1296759.13,
+            "GA채널CMIP": 0.0,
+            "자사설계사채널CMIP": 0.0,
+            "변액CMIP": 6.76,
+            "저축CMIP": 0.0
+          },
+          {
+            "고객ID": 14251.0,
+            "총보험료": 1810537.38,
+            "CMIP": 1807363.88,
+            "GA채널CMIP": 0.0,
+            "자사설계사채널CMIP": 0.0,
+            "변액CMIP": 13035.8,
+            "저축CMIP": 2287.13
+          },
+          {
+            "고객ID": 34000.0,
+            "총보험료": 2223172.87,
+            "CMIP": 2219087.45,
+            "GA채널CMIP": 0.0,
+            "자사설계사채널CMIP": 0.0,
+            "변액CMIP": 32787.48,
+            "저축CMIP": 5393.74
+          },
+          {
+            "고객ID": 68337.0,
+            "총보험료": 2931346.14,
+            "CMIP": 2945099.8,
+            "GA채널CMIP": 0.0,
+            "자사설계사채널CMIP": 10610.12,
+            "변액CMIP": 64484.77,
+            "저축CMIP": 10711.94
+          },
+          {
+            "고객ID": 100000.0,
+            "총보험료": 9911409.98,
+            "CMIP": 9996683.5,
+            "GA채널CMIP": 67623.44,
+            "자사설계사채널CMIP": 152482.72,
+            "변액CMIP": 372499.2,
+            "저축CMIP": 72621.8
+          }
+        ],
+        "top_20_percent_head": [
+          {
+            "고객ID": 95256,
+            "총보험료": 1798812.55,
+            "CMIP": 1788933.43,
+            "GA채널CMIP": 0.0,
+            "자사설계사채널CMIP": 0.0,
+            "변액CMIP": 129150.26,
+            "저축CMIP": 15752.38
+          },
+          {
+            "고객ID": 4360,
+            "총보험료": 3292820.66,
+            "CMIP": 3327526.21,
+            "GA채널CMIP": 0.0,
+            "자사설계사채널CMIP": 0.0,
+            "변액CMIP": 33831.11,
+            "저축CMIP": 7659.52
+          },
+          {
+            "고객ID": 49803,
+            "총보험료": 2608526.02,
+            "CMIP": 2418869.99,
+            "GA채널CMIP": 7625.19,
+            "자사설계사채널CMIP": 17513.02,
+            "변액CMIP": 5995.48,
+            "저축CMIP": 460.25
+          },
+          {
+            "고객ID": 4173,
+            "총보험료": 2661404.84,
+            "CMIP": 2677175.48,
+            "GA채널CMIP": 0.0,
+            "자사설계사채널CMIP": 0.0,
+            "변액CMIP": 25888.74,
+            "저축CMIP": 9433.37
+          },
+          {
+            "고객ID": 46170,
+            "총보험료": 3957870.02,
+            "CMIP": 3911341.95,
+            "GA채널CMIP": 0.0,
+            "자사설계사채널CMIP": 0.0,
+            "변액CMIP": 45167.79,
+            "저축CMIP": 1322.26
+          }
+        ]
+      }
+    }
+  ],
+  "active_marts": [
+    "cust_intg",
+    "cust_enroll_history"
+  ]
+}

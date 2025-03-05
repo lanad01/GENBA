@@ -1,0 +1,54 @@
+{
+  "thread_id": "Do Not Call Age Comparison",
+  "created_at": "a1cc5df1-d66c-4685-a976-f78c83584333",
+  "internal_id": "temp_KSW_20250305_1317",
+  "messages": [
+    {
+      "role": "assistant",
+      "content": "안녕하세요! AI 분석 어시스턴트입니다. 무엇이든 물어보세요!"
+    },
+    {
+      "role": "user",
+      "content": "담보상품명이 '질병사망'인 담보 상품을 가입한 고객들의 월별 금융거래 패턴을 알고 싶습니다."
+    },
+    {
+      "role": "assistant",
+      "content": "분석이 완료되었습니다! 아래 결과를 확인해주세요.",
+      "validated_code": "```python\nimport pandas as pd\n\n# '질병사망' 담보 상품을 가입한 고객 필터링\ndisease_death_customers = cust_enroll_history[cust_enroll_history['가입담보명'] == '질병사망']['고객ID'].unique()\n\n# 해당 고객들의 금융거래 패턴 분석\nfinancial_patterns = cust_intg[cust_intg['고객ID'].isin(disease_death_customers)]\n\n# 월별 금융거래 패턴 집계\nfinancial_patterns['기준년월'] = financial_patterns['기준년월'].astype(str)\nmonthly_financial_patterns = financial_patterns.groupby('기준년월').agg({\n    'CMIP': 'sum',\n    '교차채널CMIP': 'sum',\n    'DM채널유지계약건수': 'sum',\n    '기타채널CMIP': 'sum',\n    'GA채널CMIP': 'sum',\n    '자사설계사채널CMIP': 'sum',\n    'CM채널CMIP': 'sum',\n    '아웃바운드채널CMIP': 'sum'\n}).round(2)\n\n# 결과 저장\nanalytic_results = {\n    'monthly_financial_patterns': monthly_financial_patterns\n}\n\nprint(monthly_financial_patterns)\n```",
+      "chart_filename": "../img/chart_20250305131830.png",
+      "analytic_results": null,
+      "insights": "1. 주요 발견사항\n- '질병사망' 담보 상품을 가입한 고객들의 월별 금융거래 패턴을 분석한 결과, 자사설계사채널의 CMIP가 다른 채널에 비해 월등히 높은 것으로 나타났습니다. 이는 고객들이 주로 자사 설계사를 통해 금융 거래를 진행하고 있음을 시사합니다.\n- GA채널과 기타채널의 CMIP도 비교적 높은 수준을 유지하고 있으며, 이는 다양한 채널을 통해 고객들이 금융 거래를 하고 있음을 보여줍니다.\n- 월별로 CMIP의 변동폭은 크지 않으며, 안정적인 거래 패턴을 보이고 있습니다.\n\n2. 특이점\n- 교차채널CMIP는 모든 월에서 0으로 나타나고 있어, 교차채널을 통한 금융 거래가 이루어지지 않고 있음을 알 수 있습니다.\n- DM채널유지계약건수는 월별로 약간의 변동이 있지만, 큰 차이는 보이지 않습니다.\n\n3. 추천 사항\n- 자사설계사채널을 통한 거래가 가장 활발하므로, 이 채널을 더욱 강화하여 고객 만족도를 높이고, 신규 고객 유치를 위한 전략을 마련하는 것이 좋습니다.\n- 교차채널을 통한 거래가 전혀 이루어지지 않고 있으므로, 이 부분에 대한 원인을 분석하고 개선 방안을 모색할 필요가 있습니다. 교차채널을 활성화함으로써 고객에게 다양한 선택지를 제공할 수 있을 것입니다.\n- GA채널과 기타채널의 높은 CMIP를 유지하기 위해, 이 채널들에 대한 지속적인 모니터링과 지원이 필요합니다.",
+      "report": "1. 요약  \n'질병사망' 담보 상품 고객의 금융거래 패턴 분석\n\n2. 분석 방법  \n월별 CMIP 데이터 분석 및 채널별 비교\n\n3. 주요 발견사항  \n자사설계사채널 CMIP가 가장 높고 안정적임\n\n4. 결론 및 제언  \n자사설계사채널 강화 및 교차채널 활성화 필요"
+    },
+    {
+      "role": "user",
+      "content": "고객정보의 두낫콜 여부에 따른 평균 나이를 비교해 주세요."
+    },
+    {
+      "role": "assistant",
+      "content": "분석이 완료되었습니다! 아래 결과를 확인해주세요.",
+      "validated_code": "```python\ncust_intg['나이_수치'] = cust_intg['나이'].replace({'10세미만': 5, '10대': 15, '20대': 25, '30대': 35, '40대': 45, '50대': 55, '60대': 65, '70대': 75, '80대': 85})\naverage_age_by_do_not_call = cust_intg.groupby('두낫콜여부')['나이_수치'].mean().round(2)\nanalytic_results = {'average_age_by_do_not_call': average_age_by_do_not_call}\nprint(average_age_by_do_not_call)\n```",
+      "chart_filename": null,
+      "analytic_results": null,
+      "insights": "1. 주요 발견사항\n   - 두낫콜 여부에 따른 고객의 평균 나이는 거의 차이가 없습니다. 두낫콜을 설정하지 않은 고객의 평균 나이는 45.84세이고, 두낫콜을 설정한 고객의 평균 나이는 45.91세입니다.\n\n2. 특이점\n   - 두낫콜 여부에 따른 평균 나이의 차이가 거의 없다는 점은 특이합니다. 이는 두낫콜 설정이 고객의 나이와 크게 관련이 없음을 시사할 수 있습니다.\n\n3. 추천 사항\n   - 두낫콜 여부와 관련된 다른 변수들을 추가로 분석하여, 두낫콜 설정에 영향을 미치는 요인을 파악하는 것이 좋습니다. 예를 들어, 고객의 지역, 보험 상품 유형, 과거의 고객 서비스 경험 등이 두낫콜 설정에 영향을 미칠 수 있습니다.\n   - 두낫콜 설정이 고객의 나이와 관련이 없다는 점을 고려하여, 마케팅 전략을 수립할 때 나이보다는 다른 고객 세분화 기준을 사용하는 것이 효과적일 수 있습니다.\n   - 두낫콜 설정 고객에 대한 커뮤니케이션 전략을 재검토하여, 고객의 선호도를 반영한 맞춤형 접근 방식을 개발하는 것이 중요합니다.",
+      "report": "1. 요약  \n두낫콜 여부에 따른 평균 나이는 거의 차이 없음.\n\n2. 분석 방법  \n두낫콜 여부에 따른 고객 평균 나이 비교.\n\n3. 주요 발견사항  \n두낫콜 설정 여부에 따른 평균 나이 차이 미미.\n\n4. 결론 및 제언  \n다른 변수 분석으로 두낫콜 영향 요인 파악 필요."
+    },
+    {
+      "role": "user",
+      "content": "고객정보의 두낫콜 여부에 따른 평균 나이를 비교해 주세요."
+    },
+    {
+      "role": "assistant",
+      "content": "분석이 완료되었습니다! 아래 결과를 확인해주세요.",
+      "validated_code": "```python\nage_mapping = {\n    '10세미만': 5,\n    '10대': 15,\n    '20대': 25,\n    '30대': 35,\n    '40대': 45,\n    '50대': 55,\n    '60대': 65,\n    '70대': 75,\n    '80대': 85\n}\n\ncust_intg['나이_수치'] = cust_intg['나이'].map(age_mapping)\naverage_age_by_donotcall = cust_intg.groupby('두낫콜여부')['나이_수치'].mean().round(2)\n\nanalytic_results = {\n    'average_age_by_donotcall': average_age_by_donotcall\n}\n\nprint(average_age_by_donotcall)\n```",
+      "chart_filename": {},
+      "analytic_results": null,
+      "insights": "1. 주요 발견사항\n   - 두낫콜 여부에 따른 고객의 평균 나이는 거의 차이가 없습니다. 두낫콜을 설정하지 않은 고객의 평균 나이는 45.84세이고, 두낫콜을 설정한 고객의 평균 나이는 45.91세입니다.\n\n2. 특이점\n   - 두낫콜 여부에 따른 평균 나이의 차이가 거의 없다는 점은 특이합니다. 이는 두낫콜 설정이 특정 연령대에 집중되지 않고, 다양한 연령대에서 고르게 분포되어 있음을 시사할 수 있습니다.\n\n3. 추천 사항\n   - 두낫콜 여부와 관련된 다른 변수(예: 고객의 보험 상품 유형, 가입 기간 등)와의 관계를 추가로 분석하여, 두낫콜 설정의 배경을 더 깊이 이해할 필요가 있습니다.\n   - 두낫콜 설정이 고객의 특정 행동 패턴이나 선호도와 관련이 있는지 탐색하여, 마케팅 전략 수립 시 활용할 수 있는 인사이트를 도출하는 것이 좋습니다.\n   - 두낫콜 설정이 고객 만족도나 이탈률에 미치는 영향을 분석하여, 고객 관리 및 서비스 개선에 반영할 수 있는 방안을 모색해야 합니다.",
+      "report": "1. 요약  \n두낫콜 여부에 따른 평균 나이는 거의 차이 없음.\n\n2. 분석 방법  \n두낫콜 여부에 따른 고객 평균 나이 비교.\n\n3. 주요 발견사항  \n두낫콜 설정 여부에 따른 평균 나이 차이 미미.\n\n4. 결론 및 제언  \n다른 변수와의 관계 분석으로 두낫콜 배경 이해 필요."
+    }
+  ],
+  "active_marts": [
+    "cust_intg",
+    "cust_enroll_history"
+  ]
+}

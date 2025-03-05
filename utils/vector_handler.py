@@ -216,7 +216,7 @@ AI 응답: {response.get("content", "응답 없음")}
         vectorstore.add_texts([document_text])
         vector_db_path = os.path.join(VECTOR_DB_SESSION_PATH, f"{internal_id}_vectorstore")
         vectorstore.save_local(vector_db_path)
-        print(f"✅ 벡터DB 저장 완료 (세션: {internal_id})")
+        print(f"📩 벡터DB 저장 완료 (세션: {internal_id})")
 
     except Exception as e:
         print(f"❌ [save_chat_to_vector_db] 벡터DB 저장 중 오류 발생: {e}")

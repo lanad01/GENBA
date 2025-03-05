@@ -134,10 +134,40 @@ def save_thread(internal_id, response_data):
                 normalized_msg.update({
                     "validated_code": msg.get("validated_code"),
                     "chart_filename": msg.get("chart_filename"),
-                    "analytic_results": msg.get("analytic_results"),
+                    # "analytic_results": msg.get("analytic_results"),
                     "insights": msg.get("insights"),
                     "report": msg.get("report")
                 })
+
+            # generated_code 필드 추가 (에러 발생 시에도 코드 유지)
+            if "generated_code" in msg:
+                normalized_msg["generated_code"] = msg.get("generated_code")
+                
+            # 에러 메시지 필드 추가
+            if "error_message" in msg:
+                normalized_msg["error_message"] = msg.get("error_message")
+                
+            # DataFrame 객체 처리
+            if "analytic_result" in msg and msg["analytic_result"]:
+                try:
+                    analytic_result = msg["analytic_result"]
+                    if isinstance(analytic_result, dict):
+                        # 딕셔너리 내의 DataFrame 객체 처리
+                        serialized_result = {}
+                        for key, value in analytic_result.items():
+                            if hasattr(value, 'to_dict'):  # DataFrame 확인
+                                serialized_result[key] = value.to_dict('records')
+                            else:
+                                serialized_result[key] = value
+                        normalized_msg["analytic_result"] = serialized_result
+                    elif hasattr(analytic_result, 'to_dict'):  # DataFrame 확인
+                        normalized_msg["analytic_result"] = analytic_result.to_dict('records')
+                    else:
+                        normalized_msg["analytic_result"] = analytic_result
+                except Exception as e:
+                    print(f"DataFrame 직렬화 중 오류: {e}")
+                    normalized_msg["analytic_result"] = str(analytic_result)
+
             # request_summary가 "new_chat"일 때만 업데이트
             if request_summary == "new_chat" and "request_summary" in msg:
                 request_summary = msg.get("request_summary")
