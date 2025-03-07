@@ -535,7 +535,7 @@ def render_chat_interface():
                 if "insights" in message and message["insights"]:
                     st.divider()
                     st.markdown("""\n##### 📑 분석 인사이트\n""")
-                    st.markdown(message["insights"])
+                    st.text_area(message["insights"])
 
                 # ✅ 리포트 텍스트 출력
                 if "report" in message and message["report"]:
@@ -712,28 +712,54 @@ def initialize_vectorstore():
             set_page_state(PAGE_NAME, "vectorstore", vectorstore)
     return get_page_state(PAGE_NAME, "vectorstore")
 
+def render_right_sidebar():
+    """오른쪽 사이드바 렌더링"""
+    
+    # 오른쪽 사이드바 내용
+    st.markdown("### 🔍 분석 도구")
+    st.markdown("---")
+    
+    # 여기에 오른쪽 사이드바의 내용을 추가할 수 있습니다
+    with st.expander("📊 데이터 요약", expanded=True):
+        st.markdown("데이터 요약 정보를 표시할 수 있습니다.")
+    
+    with st.expander("📈 시각화 옵션", expanded=False):
+        st.markdown("차트 옵션을 설정할 수 있습니다.")
+        
+    with st.expander("⚙️ 분석 설정", expanded=False):
+        st.markdown("분석 관련 설정을 할 수 있습니다.")
+
 def main():
     """메인 함수"""
     st.set_page_config(
         page_title=CONSTANTS["PAGE_TITLE"],
         page_icon=CONSTANTS["PAGE_ICON"],
-        layout='wide'
+        layout='wide',
+        initial_sidebar_state='expanded'
     )
     
-    initialize_session_state() # ✅ 세션 상태 초기화
-    apply_custom_styles() # ✅ 커스텀 스타일 적용
-    render_mart_selector() # ✅ 마트 선택 렌더링
-    render_sidebar_chat() # ✅ 채팅 렌더링
-    render_sidebar_document() # ✅ 문서 관리 렌더링
-    vectorstore = initialize_vectorstore() # ✅ 벡터스토어 초기화
-    if not vectorstore:
-        return
-    render_chat_interface() # ✅ 채팅 기록 인터페이스 렌더링
+    initialize_session_state()  # 세션 상태 초기화
+    apply_custom_styles()  # 커스텀 스타일 적용
     
-    # ✅ 입력창과 메시지 사이에 여백 추가
-    st.markdown("<br><br><br>", unsafe_allow_html=True)
-
-    process_chat_input() # ✅ 채팅 입력 처리
+    # 왼쪽 사이드바 렌더링 (기존 Streamlit 사이드바 사용)
+    render_sidebar_chat()  # 채팅 관리
+    render_sidebar_document()  # 문서 관리
+    
+    # 메인 컨텐츠와 오른쪽 사이드바를 2단 컬럼으로 구성
+    main_content, right_area = st.columns([4, 1])
+    
+    with main_content:
+        render_mart_selector()  # 마트 선택 렌더링
+        vectorstore = initialize_vectorstore()  # 벡터스토어 초기화
+        if not vectorstore:
+            return
+        render_chat_interface()  # 채팅 기록 인터페이스 렌더링
+        st.markdown("<br><br><br>", unsafe_allow_html=True)
+    
+    with right_area:
+        render_right_sidebar()  # 오른쪽 사이드바
+    
+    process_chat_input()  # 채팅 입력 처리
 
 if __name__ == '__main__':
     main()

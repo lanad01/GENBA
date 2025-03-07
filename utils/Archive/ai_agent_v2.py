@@ -469,8 +469,8 @@ class DataAnayticsAssistant:
         )
         try:
             # 전체 코드 실행
-            output, analytic_results = self._execute_code_with_capture(code_to_execute, exec_globals, is_sample=False)
-            token_count = self._calculate_tokens(str(analytic_results))
+            output, analytic_result = self._execute_code_with_capture(code_to_execute, exec_globals, is_sample=False)
+            token_count = self._calculate_tokens(str(analytic_result))
             
             # ✅ 토큰 제한 설정 (예: 5000 토큰 초과 시 차단)
             TOKEN_LIMIT = 5000
@@ -480,22 +480,22 @@ class DataAnayticsAssistant:
                 print(f"⚠️ 토큰 수 초과: {token_count} > {TOKEN_LIMIT}")
                 self.retry_count += 1
                 return Command(update={
-                    "error_message": f"결과 데이터 analytic_results의 적정 토큰 수를 초과하였습니다. analytic_results에 Raw 데이터 혹은 불필요한 반복 적재를 피해주세요: {token_count} > {TOKEN_LIMIT}",
+                    "error_message": f"결과 데이터 analytic_result의 적정 토큰 수를 초과하였습니다. analytic_result에 Raw 데이터 혹은 불필요한 반복 적재를 피해주세요: {token_count} > {TOKEN_LIMIT}",
                     "from_full_execution": True,  # 플래그 추가
                     "from_token_limit": True
                 }, goto="Regenerate_Code")
             
             print(f"🔄 전체 데이터 실행 성공")
-            print(f'🔄 analytic_results\n {analytic_results}')
+            print(f'🔄 analytic_result\n {analytic_result}')
             # print(f'🔄 : output\n {output}')
 
             # 분석 결과가 있는 경우
-            if analytic_results is not None:
+            if analytic_result is not None:
                 unique_id = self.generate_unique_id()
                 # 전체 실행 성공 시 validated_code 설정
                 current_code = state.get("regenerated_code") or state["generated_code"]
                 return Command(update={
-                    "analytic_result": analytic_results,
+                    "analytic_result": analytic_result,
                     "execution_output": output,
                     "data_id": unique_id,
                     "validated_code": current_code  # 성공한 코드를 validated_code로 저장
@@ -967,32 +967,32 @@ Do not hardcode any values - use the analytic_result dictionary directly.
 
             # 분석 결과 초기화
             results = None
-            analytic_results = None
+            analytic_result = None
             
             # 전체 데이터 실행 시 분석 결과 추출
             if not is_sample:
                 if "result_df" in safe_locals:
                     results = safe_locals["result_df"]
-                elif "analytic_results" in safe_locals:
-                    results = safe_locals["analytic_results"]
+                elif "analytic_result" in safe_locals:
+                    results = safe_locals["analytic_result"]
                 
                 # 결과 타입에 따른 표준화 처리
                 if results is not None:
                     if isinstance(results, pd.DataFrame):
                         # DataFrame을 dictionary로 변환
-                        analytic_results = results.to_dict('records') if not results.empty else {}
+                        analytic_result = results.to_dict('records') if not results.empty else {}
                     elif isinstance(results, dict):
                         # Dictionary는 그대로 사용
-                        analytic_results = results
+                        analytic_result = results
                     elif isinstance(results, list):
                         # List는 그대로 사용
-                        analytic_results = results
+                        analytic_result = results
                     else:
                         # 기타 타입은 dictionary로 변환
-                        analytic_results = {"result": str(results)}
+                        analytic_result = {"result": str(results)}
             
             # 출력 및 분석 결과 반환
-            return captured_output.getvalue(), analytic_results
+            return captured_output.getvalue(), analytic_result
             
         except Exception as e:
             captured_output.write(f"Error: {str(e)}\n")  # 에러 메시지 출력

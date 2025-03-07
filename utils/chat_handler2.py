@@ -124,7 +124,7 @@ def get_history(thread_id: str) -> list:
 
 
 # ✅ 백그라운드에서 저장을 실행하는 비동기 처리
-def process_chat_response(assistant: Any, query: str, internal_id: str,):
+def process_chat_response(assistant: Any, query: str, internal_id: str, start_from_analytics=False, feedback_point=None):
     """
     UI를 먼저 업데이트한 후, 백그라운드에서 MongoDB 저장, 벡터DB 저장, Summarization을 실행.
     """
@@ -138,7 +138,7 @@ def process_chat_response(assistant: Any, query: str, internal_id: str,):
         # ✅ 기존 대화 기록 가져오기
         context = get_history(thread_id=internal_id)
         print(f"🤵 컨텍스트 after get_history:\n{context}")
-        result = assistant.ask(query, context)
+        result = assistant.ask(query, context, start_from_analytics=start_from_analytics, feedback_point=feedback_point)
         print(f"🤵 결과:\n{result}")
 
         # ✅ UI 렌더링을 위해 답변 결과(result)를 messages 리스트에 데이터 저장
@@ -152,6 +152,7 @@ def process_chat_response(assistant: Any, query: str, internal_id: str,):
             "insights": result.get("insights", {}),
             "report": result.get("report", {}),
             "request_summary": result.get("request_summary", {}),
+            "feedback_point": result.get("feedback_point", {}),
         }
 
         # ✅ 메인 답변 처리

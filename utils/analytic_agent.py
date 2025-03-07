@@ -7,15 +7,20 @@
 ##########################################################################################
 # 라이브러리
 ##########################################################################################
+# Built-in Packages
 import os, sys
 import io
 import pickle
 import pandas as pd
 import numpy as np
 import traceback
+import ast
+import pkg_resources
 from datetime import datetime
+
+# Thire Party Packages
 from typing import TypedDict, List, Literal, Annotated, Dict, Union
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import tiktoken
 import matplotlib.pyplot as plt
 import matplotlib
@@ -27,8 +32,8 @@ from langchain_openai import ChatOpenAI
 from langgraph.types import Command
 from fuzzywuzzy import process
 
+# User Defined Packages
 from prompt.prompts import *
-from common_txt import logo
 from utils.vector_handler import load_vectorstore
 
 ##########################################################################################
@@ -43,13 +48,6 @@ PROCESSED_DATA_PATH = "../output/stage1/processed_data_info.xlsx"
 MAX_RETRIES = 3
 TOKEN_LIMIT = 10000 # ✅ 토큰 제한 설정 (예: 5000 토큰 초과 시 차단)
 RECURSION_LIMIT = 100
-eda_prompt_mapping = {
-    "기본 정보 분석": PROMPT_EDA_BASIC_INFO,
-    "기초 통계 분석": PROMPT_EDA_STATISTICAL_ANALYSIS,
-    "결측치 처리": PROMPT_EDA_MISSING_VALUE_HANDLING,
-    "변수 간 관계 분석": PROMPT_EDA_FEATURE_RELATIONSHIP,
-    "이상치 탐지": PROMPT_EDA_OUTLIER_DETECTION
-}
 
 ##########################################################################################
 # 구현 코드
@@ -57,14 +55,10 @@ eda_prompt_mapping = {
 # ✅ AI 분석 에이전트 상태 정의(state에 적재된 데이터를 기반으로 이동)
 class State(TypedDict):
     messages: List[HumanMessage]  # 🔹 사용자와 AI 간의 대화 메시지 목록    
-    context_history: List[Dict]  # 이전 대화 기록
-    filtered_context: str  # 필터링된 컨텍스트
-    final_query: str  # 최종 처리된 질의
     mart_info: str  # 🔹 현재 활성화된 데이터프레임 (분석 대상)
     generated_code: str  # 🔹 초기 생성된 코드
     q_category: str  # 🔹 Supervisor가 판단한 질문 유형 (Analytics, General, Knowledge)
-    general_response: str  # 🔹 General 질문에 대한 응답
-    knowledge_response: str  # 🔹 Knowledge 질문에 대한 응답
+    content: str  # 🔹 일반/지식 질문에 대한 응답
     retry_count: int  # 🔹 코드 재생성 실패 시 재시도 횟수 (최대 3회)
     regenerated_code: str  # 🔹 재생성된 코드
     validated_code: str  # 전체 실행까지 통과한 코드
@@ -76,18 +70,26 @@ class State(TypedDict):
     report: str  # 🔹 생성된 리포트
     chart_needed: bool  # 🔹 차트가 필요한지 여부 (True: 필요함, False: 불필요)
     chart_filename: str  # 🔹 생성된 차트의 파일 경로 (없으면 None)
-    chart_error: int  # 🔹 차트 생성 횟수 카운터
+    chart_error: int  # 🔹 차트 에러 메시지
     from_full_execution: bool  # 🔹 코드 재생성 시 초기 실행 여부
     from_token_limit: bool  # 🔹 토큰 제한 초과 시 초기 실행 여부
     request_summary: str  # 🔹 분석 요청을 한글로 요약한 내용
-    analysis_type: str  # 🔹 분석 유형 (EDA, ML, General)
-    eda_question: str  # 🔹 EDA 코드 생성 결과
-    eda_stage: int  # 🔹 EDA 단계 카운터
+    installed_packages: Dict[str, str]  # 🔹 패키지 이름 및 버전 저장
+    feedback: str  # 🔹 피드백 내용
+    feedback_point: list  # 🔹 피드백 포인트
+    start_from_analytics: bool  # 🔹 분석 시작 여부
+
+class Feedback(BaseModel):
+    feedback_point: list[str]  # 리스트 항목의 타입을 명시적으로 str로 지정
+
+# 피드백 필요 여부를 위한 구조화된 출력 모델
+class FeedbackNeeded(BaseModel):
+    decision: Literal["yes", "no"] = Field(description="피드백이 필요한지 여부 (yes 또는 no)")
 
 # ✅ 경로 결정용 라우터
 class Router(BaseModel):
     next: Literal["Analytics", "General", "Knowledge", "Generate_Code", "Execute_Sample", "Regenerate_Code", "Execute_Full", 
-                  "Save_Data", "Insight_Builder", "Chart_Builder", "Regenerate_Chart", "Report_Builder", "__end__"]
+                  "Save_Data", "Insight_Builder", "Chart_Builder", "Regenerate_Chart", "Report_Builder", "After_Feedback", "__end__"]
 
 class DataAnayticsAssistant:
     """Python DataFrame 기반 AI 분석 에이전트 (LangGraph 기반)"""
@@ -103,9 +105,10 @@ class DataAnayticsAssistant:
         self.mart_info = None
         self.retry_count = 0
 
-        # 질의 분류(문맥 + 사용자질의 or 사용자 질의)
-        self.original_query = None
-        self.context = None
+        # 질의 관련 변수 초기화
+        self.original_query = None  # 원본 사용자 질의
+        self.context = None  # 이전 대화 기록 및 문맥 정보
+        self.context_query = None  # 문맥이 포함된 최종 질의
         
         # 마트 정보 초기 로드
         try:
@@ -130,9 +133,6 @@ class DataAnayticsAssistant:
         workflow.add_node("Analytics", self.handle_analytics)
         workflow.add_node("General", self.handle_general)
         workflow.add_node("Knowledge", self.handle_knowledge)
-        workflow.add_node("Check_Analysis_Question", self.classify_analysis_question)  # ✅ 추가
-        workflow.add_node("Eda_Generate_Code", self.generate_eda_code)  # ✅ 추가
-        workflow.add_node("ML_Generate_Code", self.generate_ml_code)  # ✅ 추가
         workflow.add_node("Generate_Code", self.generate_python_code)
         workflow.add_node("Execute_Sample", self.execute_sample_code)
         workflow.add_node("Regenerate_Code", self.regenerate_code)
@@ -142,6 +142,7 @@ class DataAnayticsAssistant:
         workflow.add_node("Chart_Builder", self.generate_chart)
         workflow.add_node("Regenerate_Chart", self.regenerate_chart)
         workflow.add_node("Report_Builder", self.generate_report)
+        workflow.add_node("After_Feedback", self.after_feedback)
 
         # 기본 흐름 정의
         workflow.add_edge(START, "Context")
@@ -156,54 +157,9 @@ class DataAnayticsAssistant:
             }
         )
         
-         # ✅ Analytics → Check_EDA_Question 추가
-        workflow.add_edge("Analytics", "Check_Analysis_Question")
-
-        # ✅ Check_Analysis_Question → 분석 코드 생성 노드 조건부 라우팅 설정
-        workflow.add_conditional_edges(
-            "Check_Analysis_Question",
-            lambda state: (
-                "Eda_Generate_Code" if state.get("analysis_type") == "EDA" else
-                "ML_Generate_Code" if state.get("analysis_type") == "ML" else
-                "Generate_Code"
-            ),
-            {
-                "Eda_Generate_Code": "Eda_Generate_Code",
-                "ML_Generate_Code": "ML_Generate_Code",
-                "Generate_Code": "Generate_Code",
-            }
-        )
-
-        # ✅ 코드 생성 노드 조건부 라우팅 설정
-        # workflow.add_edge("Eda_Generate_Code", "Execute_Sample")
-        workflow.add_conditional_edges(
-            "Eda_Generate_Code",
-            self.route_after_generate_code,
-            {
-                "Execute_Sample": "Execute_Sample",
-                END : END,
-            }
-        )
-        # workflow.add_edge("ML_Generate_Code", "Execute_Sample")
-        workflow.add_conditional_edges(
-            "ML_Generate_Code",
-            self.route_after_generate_code,
-            {
-                "Execute_Sample": "Execute_Sample",
-                END : END,
-            }
-        )
-        workflow.add_conditional_edges(
-            "Generate_Code",
-            self.route_after_generate_code,
-            {
-                "Execute_Sample": "Execute_Sample",
-                END : END,
-            }
-        )
-
-        # ✅ 샘플 실행 후 조건부 라우팅 설정
-        workflow.add_conditional_edges(
+        workflow.add_edge("Analytics", "Generate_Code")
+        workflow.add_edge("Generate_Code", "Execute_Sample")
+        workflow.add_conditional_edges( # ✅ 샘플 실행 후 조건부 라우팅 설정
             "Execute_Sample",
             self.route_after_sample,
             {
@@ -212,9 +168,7 @@ class DataAnayticsAssistant:
                 END : END
             }
         )
-
-        # ✅ 코드 재생성 흐름
-        workflow.add_conditional_edges(
+        workflow.add_conditional_edges( # ✅ 코드 재생성 흐름
             "Regenerate_Code",
             self.route_after_regenerate,  # 새로운 라우터 함수 사용
             {
@@ -223,9 +177,7 @@ class DataAnayticsAssistant:
                 END: END  # ✅ 3회 이상이면 종료
             }
         )
-
-        # ✅ 전체 데이터 실행 후 조건부 라우팅 설정
-        workflow.add_conditional_edges(
+        workflow.add_conditional_edges( # ✅ 전체 데이터 실행 후 조건부 라우팅 설정
             "Execute_Full",
             self.route_after_full_execution,
             {
@@ -234,12 +186,8 @@ class DataAnayticsAssistant:
                 END : END
             }
         )
-
-        # ✅ 데이터 저장 후 인사이트 생성 노드로 이동
         workflow.add_edge("Save_Data", "Insight_Builder")
-
-        # ✅ 인사이트 생성 후 조건부 라우팅 설정
-        workflow.add_conditional_edges(
+        workflow.add_conditional_edges( # ✅ 인사이트 생성 후 조건부 라우팅 설정
             "Insight_Builder",
             self.route_after_insights,
             {
@@ -247,9 +195,7 @@ class DataAnayticsAssistant:
                 "Report_Builder": "Report_Builder"
             }
         )
-
-        # ✅ 차트 생성 후 조건부 라우팅 설정
-        workflow.add_conditional_edges(
+        workflow.add_conditional_edges( # ✅ 차트 생성 후 조건부 라우팅 설정
             "Chart_Builder",
             self.route_after_chart,
             {
@@ -257,9 +203,7 @@ class DataAnayticsAssistant:
                 "Report_Builder": "Report_Builder",  # 성공 또는 최대 재시도 초과
             }
         )
-        
-        # ✅ 차트 재생성 후 조건부 라우팅 설정
-        workflow.add_conditional_edges(
+        workflow.add_conditional_edges( # ✅ 차트 재생성 후 조건부 라우팅 설정
             "Regenerate_Chart",
             self.route_after_chart,
             {
@@ -267,31 +211,59 @@ class DataAnayticsAssistant:
                 "Report_Builder": "Report_Builder",  # 성공 또는 최대 재시도 초과
             }
         )
-
-        # ✅ 리포트 생성 후 종료
         workflow.add_conditional_edges(
             "Report_Builder",
-            self.route_after_report,  # ✅ 별도 함수에서 state를 받아 처리하도록 변경
+            self.route_after_report,  # 새로운 라우터 함수 추가
             {
-                "Eda_Generate_Code": "Eda_Generate_Code",
-                END : END,
+                "After_Feedback": "After_Feedback",
+                END: END
             }
         )
+        workflow.add_edge("After_Feedback", END)
         self.graph = workflow.compile()
         print("✅ 그래프 컴파일 완료")        
         
     ###############################################################################################
     # ✅ 실행
     ###############################################################################################
-    def ask(self, query: str, context: list):
+    def ask(self, query: str, context: list, start_from_analytics=False, feedback_point=None):
         """LangGraph 실행"""
-        # 쿼리 상태 저장
-        self.original_query = query
+
+        # 컨텍스트 저장
         self.context = context
-        
-        return self.graph.invoke({
+        # print(f"🔍 컨텍스트:\n{self.context}")
+
+        # 초기 상태 설정
+        initial_state = {
             "messages": [HumanMessage(content=query)],  # 원본 쿼리만 전달
-        }, config={"recursion_limit": RECURSION_LIMIT})
+        }
+
+        # 개선 요청일 경우
+        if start_from_analytics:
+
+            # 개선 요청 사항을 원본 질문으로 설정
+            self.original_query = feedback_point
+
+            # 초기 상태에 질문 분류를 'Analytics'로 설정 및 플래그 추가
+            initial_state.update({
+                "q_category": "Analytics",
+                "start_from_analytics": True 
+            })
+
+            self.context_query = f"""
+# 개선 요청 사항
+{self.original_query}
+
+{self.context}
+        """
+        # 일반 질문일 경우
+        else:
+            self.original_query = query
+        
+        # 그래프 실행
+        result = self.graph.invoke(initial_state, config={"recursion_limit": RECURSION_LIMIT})
+        
+        return result
 
     ###############################################################################################
     # ✅ 노드 구현
@@ -301,55 +273,60 @@ class DataAnayticsAssistant:
     # -> Context_Filter
     #########################################################
     def handle_context(self, state: State) -> Command:
-        """관련 있는 대화만 필터링하는 노드"""
+        """컨텍스트를 정리하고, 현재 질문을 최우선으로 강조하는 개선된 노드"""
+
+        # Analytics부터 시작하는 경우 Supervisor로 바로 이동(개선 요청)
+        if state.get("start_from_analytics", False):
+            print("🔍 개선 요청 처리이므로 바로 Supervisor로 이동")
+            return Command(goto="Supervisor")
+        
+        # 일반 분석인 경우 컨텍스트 필터링
         print("🔍 컨텍스트 필터링 단계")
-        
-        user_request = self.original_query
-        context = self.context
-        
-        if not context:
+        if not self.context:
             print("🔍 이전 대화 기록 없음")
-            self.context_query = user_request  # context가 없으면 원본 쿼리만 사용
-            return Command(
-                update={"filtered_context": None},
-                goto="Supervisor"
-            )
-            
+            self.context_query = self.original_query  # 문맥이 없으면 원본 질의를 그대로 사용
+            return Command(goto="Supervisor")
+
+        # 🔹 기존 대화에서 유지할 정보 필터링
         prompt = ChatPromptTemplate.from_messages([
             ("system", """
-당신은 AI 비서입니다. 
-사용자의 최근 대화 기록 중, 현재 질문과 관련 있는 대화만 남기고 나머지는 제거하세요.
-- 단, 연관된 질문일 경우 반드시 코드(`validated_code`) 및 분석 결과(`analytic_results`)를 함께 유지합니다.
+너는 AI 분석 비서야.  
+현재 질문을 최우선으로 두고, 과거 대화에서 **필요한 정보만 유지**해서 정리해줘.
+- 🔹 'validated_code' (이전 실행 코드)와 'analytic_result' (이전 분석 결과)는 꼭 포함해야 해.
+- 🔹 기존 대화에서 현재 질문과 관련 없는 내용은 제거하고, 핵심 정보만 요약해서 포함해줘.
+
+예시 : 
+# 📌 주요 참고 정보
+- 이전 질문: 보험 상품별 해지율에 영향을 미치는 주요 피쳐 분석
+- 분석된 주요 결과: 고액항암치료비, 골절진단 상품의 해지율이 가장 높음 (0.42)
+- 기존 상관관계 분석 결과: 모집설계사수, 대출가능금액합계가 해지율과 가장 높은 상관관계 (0.06)
+
+# 📜 참고 코드 (기존 실행 코드)
+```python
+(이전 validated_code)
             """),
             ("user", "### 현재 질문\n{user_request}"),
             ("user", "### 최근 대화 기록\n{context}"),
-            ("user", "### 필터링된 문맥 (관련 있는 문맥만 유지)"),
+            ("user", "### 정리된 문맥"),
         ])
 
         chain = prompt | self.llm
         filtered_context = chain.invoke({
-            "user_request": user_request,
+            "user_request": self.original_query,
             "context": "\n".join([f"\n사용자: {chat['query']}\n어시스턴트: {chat['response']}" for chat in self.context])
         }).content.strip()
 
         print(f"🔍 필터링 후 대화 :\n{filtered_context}")
         
-        # context_query 설정 (필터링된 컨텍스트가 있는 경우 포함)
-        if filtered_context:
-                self.context_query = f"""
-# 📝 이전 대화 내역
-{filtered_context}
-
-# 🤔 현재 질문
+        # 🔹 최종 Context 구성 (현재 질문을 최상단으로)
+        self.context_query = f"""
+# 🤔 현재 질문 (최우선)
 {self.original_query}
+
+{filtered_context}
         """
-        else:
-            self.context_query = self.original_query
         
-        return Command(
-            update={"filtered_context": filtered_context},
-            goto="Supervisor"
-        )
+        return Command(goto="Supervisor")
 
     #########################################################
     # ✅ Supervisor 노드
@@ -359,7 +336,7 @@ class DataAnayticsAssistant:
         """다음 단계를 결정하는 Supervisor"""
         print("="*100)  # 구분선 추가
         print("👨‍💼 Supervisor 단계:")
-        user_request = self.context_query or self.original_query # 문맥 + 질의
+
 
         # Request Summary 생성
         prompt = ChatPromptTemplate.from_messages([
@@ -369,11 +346,25 @@ class DataAnayticsAssistant:
         
         chain = prompt | self.llm
         request_summary = chain.invoke({
-            "user_request": user_request
+            "user_request": self.original_query # request summary는 원본 질의로 생성
         }).content.strip()
         
         print(f"👨‍💼 요약된 질의 내용: {request_summary}")
         
+        # 문맥이 포함된 최종 질의 사용
+        user_request = self.context_query or self.original_query
+        
+        # Analytics부터 시작하는 경우 바로 Analytics로 이동
+        if state.get("start_from_analytics", False):
+            print("👨‍💼 개선 요청 -> Analytics 단계로 바로 이동")
+            return Command(
+                update={
+                    "q_category": 'Analytics', 
+                    "request_summary": request_summary,
+                }, 
+                goto="Analytics"
+            )
+
         # 질문 유형 결정
         prompt = ChatPromptTemplate.from_messages([
                 ("system", PROMPT_SUPERVISOR),
@@ -386,7 +377,6 @@ class DataAnayticsAssistant:
             update={
                 "q_category": response.next, 
                 "request_summary": request_summary,
-                "eda_stage": 0
             }, 
             goto=response.next
         )
@@ -397,17 +387,15 @@ class DataAnayticsAssistant:
     def handle_general(self, state: State) -> Command:
         """일반적인 질문을 처리하는 노드"""
         print("\n💬 [handle_general] 일반 질문 처리")
+        user_request = self.original_query
         prompt = ChatPromptTemplate.from_messages([
                 ("system", PROMPT_GENERAL),
                 ("user", " user_request:\n{user_request}\n\n")
         ])
-                
         chain = prompt | self.llm
-        # user_request = state['messages'][0].content
-        user_request = self.original_query
         response = chain.invoke({"user_request": user_request})
         print(f"💬 일반 응답: {response.content}")
-        return Command(update={"general_response": response.content}, goto=END)
+        return Command(update={"content": response.content}, goto=END)
 
     #########################################################
     # ✅ Knowledge 노드
@@ -429,7 +417,7 @@ class DataAnayticsAssistant:
             ])
             chain = prompt | self.llm
             response = chain.invoke({"user_question": user_request})
-            return Command(update={"knowledge_response": response.content}, goto=END)
+            return Command(update={"content": response.content}, goto=END)
 
         # Retriever 생성
         retriever = vectorstore.as_retriever()
@@ -450,203 +438,16 @@ class DataAnayticsAssistant:
             chain = prompt | self.llm
             response = chain.invoke({"user_question": user_request, "context": context})
         print(f"📖 지식 기반 응답: {response.content}")
-        return Command(update={"knowledge_response": response.content}, goto=END)
+        return Command(update={"content": response.content}, goto=END)
     
     #########################################################
     # ✅ Analytics 노드
-    # -> Check_Analysis_Question
+    # -> Generate_Code
     #########################################################
     def handle_analytics(self, state: State) -> Command:
         """분석 요청을 처리하는 노드"""
         print("👨‍💼 [handle_analytics] 분석 요청 처리 시작")
-        return Command(goto="Check_Analysis_Question")
-
-    #########################################################
-    # ✅ classify_analysis_question 노드
-    # -> Eda_Generate_Code / ML_Generate_Code / Generate_Code
-    #########################################################
-    def classify_analysis_question(self, state: State) -> Command:
-        """사용자의 질문이 EDA, ML, 일반 질문인지 판단 및 분류하는 노드"""
-        print("=" * 100)
-        print("👨‍💼 분석 유형 판단 단계 (EDA vs ML vs 일반)")
-
-        user_question = self.context_query or self.original_query
-
-        # ✅ LLM 프롬프트 생성
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", PROMPT_CHECK_ANALYSIS_QUESTION),
-            ("user", "user_question:\n{user_question}\n\n")
-        ])
-
-        chain = prompt | self.llm
-        analysis_decision = chain.invoke({"user_question": user_question}).content.strip().upper()
-
-        # ✅ 분석 유형을 state에 저장
-        state_update = {"analysis_type": analysis_decision if analysis_decision in ["EDA", "ML"] else "General"}
-
-        # ✅ 분석 유형에 따라 적절한 노드로 이동
-        next_node = (
-            "Eda_Generate_Code" if state_update["analysis_type"] == "EDA" else
-            "ML_Generate_Code" if state_update["analysis_type"] == "ML" else
-            "Generate_Code"
-        )
-        print(f"👨‍💼 분석 유형: {state_update['analysis_type']}, 다음 단계: {next_node}")
-
-        return Command(update=state_update, goto=next_node)
-
-    #########################################################
-    # ✅ Eda_Generate_Code 노드
-    # -> Execute_Sample / END
-    #########################################################
-    def generate_eda_code(self, state: State) -> Command:
-        """사용자의 요청을 기반으로 Python 코드 생성"""
-        print("="*100)  # 구분선 추가
-        print("🤖 코드 생성 단계:")
-
-        # 활성화된 마트가 있는지 확인
-        if not self.active_marts:
-            print("❌ 활성화된 마트가 없습니다. 먼저 마트를 활성화해주세요.")
-            return Command(
-                update={"error_message": "❌ 활성화된 마트가 없습니다. 먼저 마트를 활성화해주세요."}, 
-                goto='__end__'
-            )
-
-        user_request = self.context_query or self.original_query
-        
-        # 사용자 질문을 기반으로 실행할 EDA 단계 선택
-        selected_categories = self.map_to_eda_category(user_request)
-        selected_categories = list(dict.fromkeys(selected_categories))
-        # print(f"🤖 선택된 카테고리: {selected_categories}")
-
-        # 선택된 프롬프트만 실행
-        if "전체" in selected_categories:
-            selected_prompts = [PROMPT_EDA_FEATURE_IMPORTANCE_ANALYSIS]
-        elif "기타" in selected_categories:
-            selected_prompts = [PROMPT_GENERATE_CODE]
-        else:
-            selected_prompts = [eda_prompt_mapping[category] for category in selected_categories if category in eda_prompt_mapping]
-        # print(f"🤖 선택된 프롬프트: {selected_prompts}")
-
-        current_stage = state.get("eda_stage", 0)
-        print(f"현재회차: {current_stage}, 수행회차: {len(selected_prompts)}")
-        
-        if current_stage >= len(selected_prompts):
-            print("🤖 모든 EDA 단계를 완료했습니다.")
-            return Command(goto=END)
-        
-        # 현재 실행할 EDA 단계 출력
-        # print(f"🤖 실행 중: {selected_prompts[current_stage]}")
-        prompt_text = selected_prompts[current_stage]
-
-        # 마트 정보 가져오기 (중괄호 이스케이프 적용)
-        mart_info = self._get_mart_info()
-
-        prompt = ChatPromptTemplate.from_messages([
-                    ("system", prompt_text),
-                    ("user", "\nuser_request:\n{user_request}"),
-                    ("user", "\mart_info:\n{mart_info}")
-            ])
-        chain = prompt | self.llm
-        response = chain.invoke({
-            "user_request": user_request,
-            "mart_info": mart_info
-        })
-        print(f"🤖 생성된 코드:\n{response.content}\n")
-
-        return Command(update={
-            "generated_code": response.content,
-            "eda_stage": current_stage + 1,
-            "regenerated_code": None,  # 초기화
-            "validated_code": None     # 초기화
-        }, goto="Execute_Sample")
-
-    #########################################################
-    # ✅ ML_Generate_Code 노드
-    # -> Execute_Sample / END
-    #########################################################
-    def generate_ml_code(self, state):
-        """사용자의 요청을 기반으로 Python 코드 생성"""
-        print("="*100)  # 구분선 추가
-        print("🤖 코드 생성 단계:")
-
-        # 활성화된 마트가 있는지 확인
-        if not self.active_marts:
-            print("❌ 활성화된 마트가 없습니다. 먼저 마트를 활성화해주세요.")
-            return Command(
-                update={"error_message": "❌ 활성화된 마트가 없습니다. 먼저 마트를 활성화해주세요."}, 
-                goto='__end__'
-            )
-
-        user_request = self.context_query or self.original_query
-
-        # 🔹 실행할 ML 프로세스 목록 (고정된 순서로 진행)
-        ml_process_steps = [
-            "PROMPT_ML_SCALING",
-            "PROMPT_ML_IMBALANCE_HANDLING",
-            "PROMPT_ML_MODEL_SELECTION",
-            "PROMPT_ML_HYPERPARAMETER_TUNING",
-            "PROMPT_ML_MODEL_EVALUATION",
-            "PROMPT_ML_FEATURE_IMPORTANCE"
-        ]
-        
-        # 마트 정보 가져오기 (중괄호 이스케이프 적용)
-        mart_info = self._get_mart_info()
-
-        # 🔹 실행할 단계별 프롬프트 적용
-        generated_code_list = []
-        for prompt in ml_process_steps:
-            prompt_text = globals().get(prompt, None)  # 문자열을 실제 프롬프트 변수로 변환
-            if not prompt_text:
-                print(f"⚠ {prompt} 프롬프트를 찾을 수 없습니다. 스킵합니다.")
-                continue  # 해당 프롬프트가 없으면 건너뜀
-            prompt_chain = ChatPromptTemplate.from_messages([
-                ("system", prompt_text.format(mart_info=mart_info)),
-                ("user", "user_request:\n{user_request}"),
-            ])
-            chain = prompt_chain | self.llm
-            response = chain.invoke({
-                "user_request": user_request,
-            })
-            generated_code_list.append(response.content)
-
-        # 🔹 Python 코드 블록만 추출
-        list_code = []
-        for code in generated_code_list:
-            extracted_code = self._extract_code_from_llm_response(code)
-            list_code.append(extracted_code)
-
-        if not list_code:
-            print("⚠ 코드 블록을 찾을 수 없습니다.")
-            return Command(update={
-                "generated_code": "# 오류: 코드 블록이 제공되지 않았습니다.",
-                }, goto =  "__end__")
-
-        tmp_code = "\n\n".join(list_code).strip()
-
-        # 🔹 코드가 비어있으면 실행 중지
-        if not tmp_code:
-            print("⚠ 생성된 코드가 없습니다.")
-            return Command(
-                update={"generated_code": "# 오류: 생성된 코드가 없습니다."}, 
-                goto=END
-            )
-
-        # 🔹 프롬프트 실행 (LLM을 이용하여 코드 통합)
-        prompt_chain = ChatPromptTemplate.from_messages([
-            ("system", PROMPT_MERGE_GENERAL_ML_CODE.replace("{", "{{").replace("}", "}}")),  # ✅ 중괄호 이스케이프 처리
-            ("user", "사용자가 제공한 코드 블록:\n{merged_code}")
-        ])
-        chain = prompt_chain | self.llm
-        response = chain.invoke({"merged_code": tmp_code})  # ✅ KeyError 해결
-        # 🔹 통합된 최종 ML 코드 저장
-        final_code = response.content.strip()
-
-        print(f"🤖 생성된 ML 코드:\n{final_code[:500]}...\n")  # 일부만 출력
-        return Command(update={
-            "generated_code": final_code,
-            "regenerated_code": None,  # 초기화
-            "validated_code": None     # 초기화
-        }, goto="Execute_Sample")
+        return Command(goto="Generate_Code")
 
     #########################################################
     # ✅ Generate_Code 노드
@@ -669,23 +470,22 @@ class DataAnayticsAssistant:
                 goto='__end__'
             )
         
-        user_request = self.context_query or self.original_query
+        user_request = self.context_query
         
         # 마트 정보 가져오기 (중괄호 이스케이프 적용)
         mart_info = self._get_mart_info()
 
-        # 프롬프트 생성 (format 활용)
+        # 기존 프롬프트 사용
         prompt_text = PROMPT_GENERATE_CODE.format(mart_info=mart_info)
-
         prompt = ChatPromptTemplate.from_messages([
             ("system", prompt_text),
             ("user", "\nuser_request:\n{user_request}")
         ])
-
         chain = prompt | self.llm
         response = chain.invoke({
             "user_request": user_request,
         })
+            
         print(f"🤖 생성된 코드:\n{response.content}\n")
         return Command(update={
             "generated_code": response.content,
@@ -710,13 +510,19 @@ class DataAnayticsAssistant:
             print(f"🧪 {mart_name}: {sample_size}개 샘플 추출")
     
         # print(f"🧪 샘플 코드 실행 직전 글로벌 키 확인(접근 가능 데이터프레임) \n {globals().keys()} ")
-
-        try:
-            # 재생성된 코드가 있으면 그것을 사용, 없으면 초기 생성 코드 사용
-            code_to_execute = self._extract_code_from_llm_response(
+        
+        # 재생성된 코드가 있으면 그것을 사용, 없으면 초기 생성 코드 사용
+        code_to_execute = self._extract_code_from_llm_response(
                 state.get("regenerated_code") or state["generated_code"]
             )
             
+        # ✅ 사용된 패키지 자동 추출
+        used_packages = self._extract_imported_packages(code_to_execute)
+        installed_versions = self._get_installed_versions(used_packages)
+
+        print(f"🛠 사용된 패키지 목록: {used_packages}")
+        print(f"📌 패키지 버전 정보: {installed_versions}")
+        try:
             # 실행 환경에 샘플 데이터프레임 추가
             exec_globals = {}
 
@@ -737,7 +543,8 @@ class DataAnayticsAssistant:
             print(f"✅ 샘플 코드 실행 성공")
             self.retry_count = 0  # 성공 시 카운터 초기화
             return Command(update={
-                "error_message": None
+                "error_message": None,
+                "installed_packages": installed_versions
             }, goto="Execute_Full")
 
         except Exception as e:
@@ -748,13 +555,20 @@ class DataAnayticsAssistant:
             error_details = {
                 "error_type": type(e).__name__,
                 "error_message": str(e),
-                "traceback": traceback.format_exc()
+                "traceback": traceback.format_exc(),
+                "installed_packages": installed_versions
             }
             self.retry_count += 1
             if self.retry_count >= MAX_RETRIES:
                 print("⚠️ 샘플 코드 실행 3회 실패 → 프로세스 종료")
-                return Command(update={"error_message": error_details}, goto="__end__")
-            return Command(update={"error_message": error_details}, goto="Regenerate_Code")
+                return Command(update={
+                    "error_message": error_details, 
+                    "installed_packages": installed_versions
+                }, goto="__end__")
+            return Command(update={
+                "error_message": error_details, 
+                "installed_packages": installed_versions
+            }, goto="Regenerate_Code")
 
     #########################################################
     # ✅ Regenerate_Code 노드
@@ -772,6 +586,7 @@ class DataAnayticsAssistant:
         user_request = self.context_query or self.original_query
         error_message = state["error_message"]
         original_code = state["generated_code"]
+        installed_packages = state.get("installed_packages", {})  # 설치된 패키지 정보 가져오기
 
         # 토큰 초과 시 코드 재생성
         if state.get("from_token_limit", False):
@@ -787,6 +602,7 @@ class DataAnayticsAssistant:
                         ("user", "\nuser_request:\n{user_request}"),
                         ("user", "\noriginal_code:\n{original_code}"),
                         ("user", "\nerror_message:\n{error_message}"),
+                        ("user", "\ninstalled_packages:\n{installed_packages}")
                 ])
         
         chain = prompt | self.llm
@@ -795,7 +611,8 @@ class DataAnayticsAssistant:
         response = chain.invoke({
             "user_request": user_request,
             "original_code": original_code,
-            "error_message": error_message
+            "error_message": error_message,       
+            "installed_packages": installed_packages  # 패키지 정보 전달
         })
         print(f"⚒️ 재생성된 코드:\n{response.content}\n")
         next_step = "Execute_Full" if from_full_execution else "Execute_Sample"
@@ -836,10 +653,17 @@ class DataAnayticsAssistant:
         code_to_execute = self._extract_code_from_llm_response(
             state.get("regenerated_code") or state["generated_code"]
         )
+        # ✅ 사용된 패키지 자동 추출
+        used_packages = self._extract_imported_packages(code_to_execute)
+        installed_versions = self._get_installed_versions(used_packages)
+
+        print(f"🛠 사용된 패키지 목록: {used_packages}")
+        print(f"📌 패키지 버전 정보: {installed_versions}")
+
         try:
             # 전체 코드 실행
-            output, analytic_results = self._execute_code_with_capture(code_to_execute, exec_globals, is_sample=False)
-            token_count = self._calculate_tokens(str(analytic_results))
+            output, analytic_result = self._execute_code_with_capture(code_to_execute, exec_globals, is_sample=False)
+            token_count = self._calculate_tokens(str(analytic_result))
             
             print(f"🔄 결과 데이터 토큰 수: {token_count}")
             
@@ -847,25 +671,26 @@ class DataAnayticsAssistant:
                 print(f"⚠️ 토큰 수 초과: {token_count} > {TOKEN_LIMIT}")
                 self.retry_count += 1
                 return Command(update={
-                    "error_message": f"결과 데이터 analytic_results의 적정 토큰 수를 초과하였습니다. analytic_results에 Raw 데이터 혹은 불필요한 반복 적재를 피해주세요: {token_count} > {TOKEN_LIMIT}",
+                    "error_message": f"결과 데이터 analytic_result의 적정 토큰 수를 초과하였습니다. analytic_result에 Raw 데이터 혹은 불필요한 반복 적재를 피해주세요: {token_count} > {TOKEN_LIMIT}",
                     "from_full_execution": True,  # 플래그 추가
                     "from_token_limit": True
                 }, goto="Regenerate_Code")
             
             print(f"🔄 전체 데이터 실행 성공")
-            print(f'🔄 analytic_results\n {analytic_results}')
+            print(f'🔄 analytic_result\n {analytic_result}')
             # print(f'🔄 : output\n {output}')
 
             # 분석 결과가 있는 경우
-            if analytic_results is not None:
+            if analytic_result is not None:
                 unique_id = datetime.now().strftime("%Y%m%d%H%M%S")
                 # 전체 실행 성공 시 validated_code 설정
                 current_code = state.get("regenerated_code") or state["generated_code"]
                 return Command(update={
-                    "analytic_result": analytic_results,
+                    "analytic_result": analytic_result,
                     "execution_output": output,
                     "data_id": unique_id,
-                    "validated_code": current_code  # 성공한 코드를 validated_code로 저장
+                    "validated_code": current_code,  # 성공한 코드를 validated_code로 저장
+                    "installed_packages": installed_versions
                 }, goto="Save_Data")
             # 분석 결과가 없는 경우
             else:
@@ -874,7 +699,8 @@ class DataAnayticsAssistant:
                 return Command(update={
                     "error_message": "분석 결과가 없습니다.",
                     "execution_output": output,
-                    "from_full_execution": True  # 플래그 추가
+                    "from_full_execution": True,  # 플래그 추가
+                    "installed_packages": installed_versions
                 }, goto="Regenerate_Code")
 
         except Exception as e:
@@ -886,12 +712,14 @@ class DataAnayticsAssistant:
             error_details = {
                 "error_type": type(e).__name__,
                 "error_message": str(e),
-                "traceback": traceback.format_exc()
+                "traceback": traceback.format_exc(),
+                "installed_packages": installed_versions
             }
             self.retry_count += 1
             return Command(update={
                 "error_message": error_details,
-                "from_full_execution": True  # 플래그 추가
+                "from_full_execution": True,  # 플래그 추가
+                "installed_packages": installed_versions
             }, goto="Regenerate_Code")
 
     #########################################################
@@ -958,7 +786,7 @@ class DataAnayticsAssistant:
             ("system", PROMPT_CHART_NEEDED),
             ("user", "user_question:\n{user_question}\n\n"),
             ("user", "analytic_result:\n{analytic_result}\n\n"),
-            ("user", "insight:\n{insight}\n\n")
+            ("user", "insight:\n{insights}\n\n")
         ])
         
         # 차트 활용 여부 'yes' 또는 'no' 반환
@@ -966,7 +794,7 @@ class DataAnayticsAssistant:
         chart_needed = chart_decision_messages.invoke({
             "user_question": user_question,
             "analytic_result": string_of_result,
-            "insight": insight_response.content
+            "insights": insight_response.content
         }).content.strip().lower()
         print(f"💡 차트 필요 여부 (yes/no): {chart_needed}")
         
@@ -1043,6 +871,7 @@ Do not hardcode any values - use the analytic_result dictionary directly.
                 'plt': plt,
                 'np': np,
                 'sns': sns,
+                'pd': pd,
                 'analytic_result': analytic_result,
             }
             
@@ -1135,7 +964,6 @@ Do not hardcode any values - use the analytic_result dictionary directly.
             print("📊 [regenerate_chart] 유효한 Python 코드 블록이 없습니다. 재시도합니다.")
             error_info = {
                 "error_message": "유효한 Python 코드 블록이 없습니다",
-                "previous_code": chart_code
             }
             self.retry_count += 1
             return Command(update={
@@ -1169,7 +997,7 @@ Do not hardcode any values - use the analytic_result dictionary directly.
         except Exception as e:
             print(f"❌ 차트 재생성 중 오류 발생: {e}")
             plt.close()
-            error_info = {"error_message": str(e),"previous_code": extracted_code,"traceback": traceback.format_exc()}
+            error_info = {"error_message": str(e),"executed_code": extracted_code,"traceback": traceback.format_exc()}
             self.retry_count += 1
             return Command(update={
                 "chart_filename": None,
@@ -1178,7 +1006,7 @@ Do not hardcode any values - use the analytic_result dictionary directly.
 
     #########################################################
     # ✅ Report_Builder 노드
-    # -> END
+    # -> After_Feedback
     #########################################################
     def generate_report(self, state):
         """최종 보고서 생성"""
@@ -1203,10 +1031,81 @@ Do not hardcode any values - use the analytic_result dictionary directly.
         })
         print("✅ 보고서 생성 완료")
         print(f"{response.content}")
-        return Command(update={
-            "report": response.content, 
-            "error_message": None
-        }, goto=END)
+
+        # start_from_analytics가 True이면 바로 END로 이동
+        if state.get("start_from_analytics", False):
+            return Command(update={
+                "report": response.content, 
+                "error_message": None
+            }, goto=END)
+        else :
+            # 일반 분석인 경우 After_Feedback으로 이동
+            return Command(update={
+                "report": response.content, 
+                "error_message": None
+            }, goto='After_Feedback')
+    
+    #########################################################
+    # ✅ After_Feedback 노드
+    # -> END
+    #########################################################
+    def after_feedback(self, state):
+        dict_result = state["analytic_result"]
+        string_of_result = str(dict_result)
+        user_question = state["messages"][0].content
+        validated_code = state["validated_code"]
+        ############################################################
+        # 피드백 필요 여부 결정
+        ############################################################
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", PROMPT_FEEDBACK_NEEDED),
+            ("user", "user_question:\n{user_question}\n\n"),
+            ("user", "analysis_result:\n{analysis_result}\n\n"),
+            ("user", "validated_code:\n{validated_code}\n\n")
+        ])
+        
+        feedback_decision = self.llm.with_structured_output(FeedbackNeeded)
+        feedback_needed_response = (prompt | feedback_decision).invoke({
+            "user_question": user_question,
+            "analysis_result": string_of_result,
+            "validated_code": validated_code
+        })
+        feedback_needed = feedback_needed_response.decision
+
+        print(f"💡 피드백 필요 여부: {feedback_needed}")
+        
+        if feedback_needed == 'yes':            
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", PROMPT_FEEDBACK_PROCESS),
+                ("user", "user_question:\n{user_question}\n\n"),
+                ("user", "analysis_result:\n{analysis_result}\n\n"),
+                ("user", "validated_code:\n{validated_code}\n\n")
+            ])
+            
+            feedback_analysis_messages = prompt | self.llm
+            feedback_analysis = feedback_analysis_messages.invoke({
+                "user_question": user_question,
+                "analysis_result": string_of_result,
+                "validated_code": validated_code,
+            }).content.strip().lower()
+            
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", PROMPT_FEEDBACK_POINT),
+                ("user", "feedback_analysis:\n{feedback_analysis}\n\n")
+            ])
+            
+            feedback_point_messages = prompt | self.llm.with_structured_output(Feedback)
+            feedback_point = feedback_point_messages.invoke({
+                "user_question": user_question,
+                "feedback_analysis": feedback_analysis
+            }).feedback_point
+
+            print(f"💡 피드백 내용: {feedback_analysis}")
+            print("✅ 피드백 완료")
+
+            return Command(update={"feedback": feedback_analysis, 'feedback_point': feedback_point}, goto=END)
+        else :
+            return Command(goto=END)
     
 
     ##################################################################################################################
@@ -1307,15 +1206,20 @@ Do not hardcode any values - use the analytic_result dictionary directly.
         return "Regenerate_Code"
 
     def route_after_report(self, state: State) -> str:
-        """Report_Builder 이후 EDA 단계를 추가 실행할지 결정"""
-        selected_categories = state.get("selected_categories", [])  # ✅ 기본값을 빈 리스트로 설정
-        eda_stage = state.get("eda_stage", 0)
-
-        # ✅ 모든 EDA 단계를 완료했다면 END로 이동
-        if eda_stage >= len(selected_categories):
+        """리포트 생성 후 다음 단계를 결정하는 라우터
+        
+        Returns:
+            str: 다음 실행할 노드의 이름 (After_Feedback 또는 END)
+        """
+        print("➡️ [route_after_report] 리포트 생성 후 경로 결정")
+        
+        # start_from_analytics가 True이면 바로 END로 이동
+        if state.get("start_from_analytics", False):
+            print("➡️ [route_after_report] 개선 요청 처리이므로 바로 종료")
             return END
-
-        return "Eda_Generate_Code"
+        
+        print("➡️ [route_after_report] 피드백 단계로 진행")
+        return "After_Feedback"
 
     ##################################################################################################################
     # 함수 모음
@@ -1367,32 +1271,32 @@ Do not hardcode any values - use the analytic_result dictionary directly.
 
             # 분석 결과 초기화
             results = None
-            analytic_results = None
+            analytic_result = None
             
             # 전체 데이터 실행 시 분석 결과 추출
             if not is_sample:
                 if "result_df" in safe_locals:
                     results = safe_locals["result_df"]
-                elif "analytic_results" in safe_locals:
-                    results = safe_locals["analytic_results"]
+                elif "analytic_result" in safe_locals:
+                    results = safe_locals["analytic_result"]
                 
                 # 결과 타입에 따른 표준화 처리
                 if results is not None:
                     if isinstance(results, pd.DataFrame):
                         # DataFrame을 dictionary로 변환
-                        analytic_results = results.to_dict('records') if not results.empty else {}
+                        analytic_result = results.to_dict('records') if not results.empty else {}
                     elif isinstance(results, dict):
                         # Dictionary는 그대로 사용
-                        analytic_results = results
+                        analytic_result = results
                     elif isinstance(results, list):
                         # List는 그대로 사용
-                        analytic_results = results
+                        analytic_result = results
                     else:
                         # 기타 타입은 dictionary로 변환
-                        analytic_results = {"result": str(results)}
+                        analytic_result = {"result": str(results)}
             
             # 출력 및 분석 결과 반환
-            return captured_output.getvalue(), analytic_results
+            return captured_output.getvalue(), analytic_result
             
         except Exception as e:
             captured_output.write(f"Error: {str(e)}\n")  # 에러 메시지 출력
@@ -1416,7 +1320,7 @@ Do not hardcode any values - use the analytic_result dictionary directly.
             print(f"⚠️ 토큰 계산 중 오류 발생: {str(e)}")
             return 0
         
-    def _extract_code_from_llm_response(self, response: str) -> str:
+    def _extract_code_from_llm_response(self, code_block: str) -> str:
         """LLM 응답에서 코드 블록을 추출하는 메소드
         
         Args:
@@ -1426,88 +1330,16 @@ Do not hardcode any values - use the analytic_result dictionary directly.
             str: 추출된 코드 (코드 블록이 없는 경우 원본 텍스트를 정리하여 반환)
         """
         try:
-            if "```python" in response:
-                return response.split("```python")[1].split("```")[0].strip()
-            elif "```" in response:
-                return response.split("```")[1].strip()
-            return response.strip()
+            if "```python" in code_block:
+                return code_block.split("```python")[1].split("```")[0].strip()
+            elif "```" in code_block:
+                return code_block.split("```")[1].strip()
+            return code_block.strip()
         except Exception as e:
             print(f"⚠️ 코드 추출 중 오류 발생: {str(e)}")
-            return response.strip()
+            return code_block.strip()
 
    
-    def map_to_eda_category(self, user_request):
-        """
-        사용자의 질문을 분석하여 적절한 EDA 단계를 선택
-        - 1차적으로 사전 정의된 동의어 매핑을 사용
-        - 2차적으로 LLM을 활용하여 의미를 추론
-        """
-        # 사전 정의된 동의어 매핑
-        eda_synonyms = {
-            "기본 정보 분석": ["기본 정보", "데이터 정보", "데이터셋 개요"],
-            "기초 통계 분석": ["기초 통계", "통계 분석", "데이터 분포"],
-            "결측치 처리": ["결측치", "Null 값", "누락된 값", "NaN", "빠진 데이터", "소실된 값"],
-            "변수 간 관계 분석": ["변수 관계", "상관관계 분석", "특성 관계"],
-            "이상치 탐지": ["이상치", "이상값", "Outlier", "비정상 데이터", "이상한 데이터"]
-        }
-        
-        # 1️⃣ 사전 정의된 키워드 매칭
-        selected_keywords = process.extract(user_request, sum(eda_synonyms.values(), []), limit=3)
-        matched_categories = []
-        for keyword, score in selected_keywords:
-            if score > 80:
-                for category, synonyms in eda_synonyms.items():
-                    if keyword in synonyms:
-                        matched_categories.append(category)
-        
-        # 2️⃣ 만약 유사어 매칭이 안되면 LLM을 활용하여 분석
-        if not matched_categories:
-            prompt = f"""
-            사용자가 EDA 분석을 요청했습니다.  
-            아래 문장에서 사용자가 원하는 분석 단계를 정확히 판별하세요.  
-
-            EDA 분석 단계:
-            1. 기본 정보 분석: 데이터 크기, 타입, 결측값, 중복 여부 확인
-            2. 기초 통계 분석: 변수의 분포, 변동성, 정규성 검정
-            3. 결측치 처리: 결측값 비율 확인, 보간 방법 적용 (예: Null 값, NaN, 누락된 값, 빠진 데이터)
-            4. 변수 간 관계 분석: 상관관계, 다중공선성, 범주형 변수 관계 분석
-            5. 이상치 탐지: 이상값 검출, 박스플롯 시각화 (예: Outlier, 비정상 데이터)
-
-            예제 1:
-            입력: "결측값 분석해줘"
-            출력: "결측치 처리"
-
-            예제 2:
-            입력: "이상값 확인 부탁해"
-            출력: "이상치 탐지"
-
-            사용자의 요청이 다음과 같을 때, 가장 적절한 EDA 단계를 반환하세요.  
-            요청: "{user_request}"
-            1. 만약 EDA 전반적인 내용을 묻는다면 "전체"라는 값을 반환하세요.
-            2. 만약 EDA 전반적인 내용이 아니며 특정 단계에 해당되는 내용이 아니라면 "기타"라는 값을 반환하세요.
-            """
-            
-            llm_response = self.llm.invoke(prompt)  # LLM을 활용하여 의미 분석
-            llm_response = llm_response.content
-            print(f"📌 LLM 추론 결과: {llm_response}")
-            
-            # LLM이 추천하는 카테고리를 기존 매핑과 비교하여 판단
-            for category in eda_synonyms.keys():
-                if category in llm_response:
-                    matched_categories.append(category)
-
-            # 적절한 EDA 단계가 없을 경우 전체 EDA 프로세스를 실행
-            if not matched_categories:
-                # matched_categories = list(eda_synonyms.keys())
-                if "전체" in llm_response:
-                    matched_categories = ["전체"]
-                elif "기타" in llm_response:
-                    matched_categories = ["기타"]
-            print(f"🔍 매칭된 카테고리: {matched_categories}")
-        
-        return matched_categories
-    
-
     def _get_mart_info(self) -> str:
         """데이터프레임의 마트 정보를 생성하는 메서드
         
@@ -1527,3 +1359,26 @@ Do not hardcode any values - use the analytic_result dictionary directly.
             mart_info = "데이터프레임 정보가 없습니다."
         
         return mart_info
+
+
+    def _extract_imported_packages(self, code):
+        """LLM이 생성한 코드에서 import된 패키지 이름만 추출"""
+        tree = ast.parse(code)
+        imports = set()
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    imports.add(alias.name.split('.')[0])  # 최상위 패키지만 추출
+            elif isinstance(node, ast.ImportFrom):
+                imports.add(node.module.split('.')[0])  # from X import Y 형식 처리
+
+        return list(imports)
+
+    def _get_installed_versions(self,used_packages):
+        """사용된 패키지의 버전만 가져오기"""
+        return {
+            pkg: pkg_resources.get_distribution(pkg).version
+            for pkg in used_packages if pkg in [p.key for p in pkg_resources.working_set]
+        }
+        

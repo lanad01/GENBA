@@ -1,15 +1,16 @@
 from datetime import datetime
 import threading
 import traceback
+import streamlit as st
 from typing import Dict, Any, Optional, Union
+from langchain.memory import ConversationBufferMemory
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 from langchain.prompts import ChatPromptTemplate
 # 사용자 패키지
-from utils.thread_handler import save_thread, rename_thread
-from utils.vector_handler import save_chat_to_vector_db
+from utils.vector_handler import save_chat_to_vector_db, search_similar_questions
+from utils.thread_handler import rename_thread, save_thread
 from common_txt import logo
-import pandas as pd
 
 # ✅ MongoDB Atlas 연결 설정
 uri = "mongodb+srv://swkwon:1q2w3e$r@cluster0.3rvbn.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
@@ -64,16 +65,11 @@ insights: {response_data.get('insights', '')}
                                 "role": "assistant",
                                 "content": response_data["content"],
                                 "validated_code": response_data["validated_code"],
-                                "generated_code": response_data["generated_code"],
                                 "chart_filename": response_data["chart_filename"],
                                 "insights": response_data["insights"],
                                 "report": response_data["report"],
                                 "request_summary": response_data["request_summary"],
                                 "context_summary": summary,  # ✅ 요약된 내용 추가
-                                "feedback": response_data["feedback"],
-                                "feedback_point": response_data["feedback_point"],
-                                "question_id": response_data["question_id"],
-                                "parent_question_id": response_data["parent_question_id"],
                                 "timestamp": datetime.now(),
                             }
                         ]
@@ -82,24 +78,17 @@ insights: {response_data.get('insights', '')}
             },
             upsert=True
         )
-        
-        print(f"🔄 대화 저장 완료 | 스레드 ID: {internal_id}")
-        print(f"🔄 대화 저장 완료 | request_summary: {response_data['request_summary']}")
-        
-        # ✅ 응답에서 request_summary 확인 및 thread_id 변경
-        if "request_summary" in response_data:
-            rename_thread(internal_id, response_data["request_summary"])
 
         # ✅ 벡터DB 저장 (백그라운드에서 실행)
         save_chat_to_vector_db(internal_id, query, response_data)
-        
+
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()
-        print(f"📩 백그라운드 저장 완료 - 소요시간: {duration:.2f}초")
+        print(f"✅ 백그라운드 저장 완료 - 소요시간: {duration:.2f}초")
 
     except Exception as e:
-        print(f"❌ 백그라운드 저장 중 오류 발생: \n{traceback.format_exc()}\n")
-        # print(f"상세 에러: {traceback.format_exc()}")
+        print(f"❌ 백그라운드 저장 중 오류 발생: {e}")
+        print(f"상세 에러: {traceback.format_exc()}")
 
 
 # ✅ 메모리 저장소 (thread_id별로 관리)
@@ -110,7 +99,7 @@ def get_history(thread_id: str) -> list:
     """
     existing_messages = collection.find(
         {"internal_id": thread_id}
-    ).sort("timestamp", -1).limit(5)
+    ).sort("timestamp", -1).limit(7)
     
     conversation_pairs = []
     for document in existing_messages:
@@ -133,88 +122,100 @@ def get_history(thread_id: str) -> list:
 
 
 # ✅ 백그라운드에서 저장을 실행하는 비동기 처리
-def process_chat_response(
-        assistant: Any, # 어시스턴트 객체
-        query: str, # 사용자 질문
-        internal_id: str, # 스레드 ID
-        start_from_analytics=False, # 분석 단계 시작 여부
-        feedback_point=None, # 피드백 대상 질문
-        parent_message=None # 부모 메시지
-    ):
+def process_chat_response(assistant: Any, query: str, internal_id: str,):
     """
     UI를 먼저 업데이트한 후, 백그라운드에서 MongoDB 저장, 벡터DB 저장, Summarization을 실행.
     """
     try:
         print("="*100)
-        print(logo)
-        print("="*100)
         print(f"🤵 질문시각: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print(f"🤵 Context Window 처리 시작 | 원본 질문 : {query}")
+        print(f"🤵 Context Window 처리 시작")
 
-        # ✅ 개선 요청인 경우 원본 정보 가져오기
-        if start_from_analytics and parent_message:
-            
-            # ✅ 부모 메시지가 있는 경우 쿼리 재구성
-            analysis_result_str = ""
-            if parent_message.get("analytic_result"):
-                if isinstance(parent_message["analytic_result"], dict):
-                    for key, value in parent_message["analytic_result"].items():
-                        if isinstance(value, pd.DataFrame):
-                            analysis_result_str += f"\n{key}:\n{value.head().to_string()}\n"
-                        else:
-                            analysis_result_str += f"\n{key}: {str(value)}\n"
-                else:
-                    analysis_result_str = str(parent_message["analytic_result"])
-            
-            # 쿼리 재구성
-            context = f"""
-이전 분석 코드:
-{parent_message.get('validated_code', '')}
-
-이전 분석 결과:
-{analysis_result_str}
-
-이전 분석 인사이트:
-{parent_message.get('insights', '')}
-"""
-
-        else:
-            context = get_history(thread_id=internal_id)
-            
-        # print(f"""🤵 컨텍스트 :\n{"🤵 비어있음" if not context else context}""")
-        # result = assistant.ask(query, context)
-        result = assistant.ask(query, context, start_from_analytics=start_from_analytics, feedback_point=feedback_point)
-
-        # print(f"🤵 결과:\n{result}")
+        # ✅ 기존 대화 기록 가져오기
+        chat_history = get_history(thread_id=internal_id)
         
+         # 🔹 프롬프트 생성 (LLM이 이전 대화 중 관련 있는 것만 남기도록 요청)
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """
+            당신은 AI 비서입니다. 
+             1. 사용자의 최근 대화 중, 현재 질문과 관련 있는 대화만 남기고 나머지는 제거하세요.
+                - 이전 대화 중, 현재 질문과 관련 없는 내용은 삭제합니다.
+                - 연관된 질문일 경우, 반드시 코드(`validated_code`)를 함께 유지합니다.
+                - 분석 결과(`analytic_result`)는 불필요한 경우 제거합니다.
+             2. 필터링된 문맥을 바탕으로 현재 질문을 자연스럽게 보강하세요.
+            """),
+            ("user", "### 현재 질문\n{current_question}"),
+            ("user", "### 최근 대화 기록\n{chat_history}"),
+            ("user", "### 필터링된 문맥 (관련 있는 문맥만 유지)"),
+            ("user", "### 보강된 질문")
+        ])
+
+        # 🔹 LLM 호출하여 필터링 수행
+        model = assistant.llm
+        chain = prompt | model
+        filtered_context = chain.invoke({
+            "current_question": query,
+            "chat_history": "\n".join([f"\n사용자: {chat['query']}\n어시스턴트: {chat['response']}"
+                                    for chat in chat_history])
+        }).content.strip()
+
+        print(f"🤵 필터링된 대화 기록: {filtered_context}")
+
+        # ✅ 전체 대화 문맥 생성
+        context_messages = []
+        for pair in chat_history:  # 여기서 한 번만 뒤집어서 과거->현재 순으로
+            context_messages.extend([
+                f"사용자 질문: {pair['query']}",
+                f"어시스턴트 응답:\n{pair['response']}"
+            ])
+        
+        previous_context = "\n\n".join(context_messages)  # reversed 제거
+
+        # ✅ LLM 실행 - 전체 컨텍스트와 함께 원본 질문 전달
+        if chat_history:
+            context_query = f"""
+# 📝 이전 대화 내역
+{filtered_context}
+
+# 🤔 현재 질문
+{query}
+"""
+            print(f"🤵 전체 컨텍스트와 함께 질문 전달")
+        else:
+            context_query = query
+            print("🤵 첫 질문 - 원본 질문 사용")
+
+        # print(f"🤵 질문: {query}")
+        print(f"🤵 최종질문: \n{context_query}")
+        result = assistant.ask(query, context_query)
+        print(f"🤵 결과:\n{result}")
+
         # ✅ UI 렌더링을 위해 답변 결과(result)를 messages 리스트에 데이터 저장
         response_data = {
             "role": "assistant",
             "content": "분석이 완료되었습니다! 아래 결과를 확인해주세요.",  # 기본 응답 메시지 추가
-            "validated_code": result.get("validated_code", {}),
-            "generated_code": result.get("generated_code", {}),
-            "analytic_result": result.get("analytic_result", {}),
-            "chart_filename": result.get("chart_filename", {}),
-            "insights": result.get("insights", {}),
-            "report": result.get("report", {}),
-            "feedback": result.get("feedback", {}),
-            "feedback_point": result.get("feedback_point", {}),
-            "request_summary": result.get("request_summary", {}),
-            "question_id": result.get("question_id", {}),
-            "parent_question_id": result.get("parent_question_id", {}),
+            "validated_code": result.get("validated_code"),
+            "analytic_result": result.get("analytic_result"),
+            "chart_filename": result.get("chart_filename"),
+            "insights": result.get("insights"),
+            "report": result.get("report"),
+            "request_summary": result.get("request_summary"),
         }
 
         # ✅ 메인 답변 처리
         if "analytic_result" not in result:
             if "error_message" in result:
-                response_data["content"] = result["error_message"]
-                # 에러가 있어도 generated_code가 있으면 포함
-                if "generated_code" in result:
-                    response_data["generated_code"] = result["generated_code"]
+                # response_data["content"] = result["error_message"]
+                # st.error(f"⚠️ 오류 발생: {result['error_message']}")
+                pass
             else:
-                response_data["content"] = result.get("content", "응답을 생성할 수 없습니다.")
+                response_data["content"] = (
+                    result.get("general_response") or 
+                    result.get("knowledge_response") or 
+                    result.get("response", "응답을 생성할 수 없습니다.")
+                )
 
-        # 백그라운드 저장 시작
+        # 스레드 생성 및 시작
         save_thread = threading.Thread(
             target=save_chat_data, 
             args=(internal_id, query, response_data, assistant.llm), 
@@ -222,14 +223,11 @@ def process_chat_response(
             name=f"SaveThread-{internal_id}"  # 스레드에 식별 가능한 이름 부여
         )
         save_thread.start()
-        print(f"🔄 백그라운드 저장 시작 - {save_thread.name}")
+        print(f"🔄 백그라운드 저장 스레드 시작 - {save_thread.name}")
 
         return response_data
 
     except Exception as e:
-        print(f"❌ 오류 발생: {traceback.format_exc()}")
-        return { 
-            "role": "assistant", 
-            "content": f"❌ 실행 도중 오류가 발생했습니다.", 
-            "error_message" : str(e),
-        } 
+        print(f"❌ 오류 발생: {e}")
+        print(f"상세 에러: {traceback.format_exc()}")
+        return {"role": "assistant", "content": f"❌ 오류 발생: {traceback.format_exc()}"}
