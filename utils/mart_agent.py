@@ -16,10 +16,11 @@ from langchain_openai import ChatOpenAI
 from langgraph.types import Command
 from langchain_community.vectorstores import FAISS
 from langchain.schema import Document
+from langchain_core.prompts import PromptTemplate, ChatPromptTemplate
 
 from utils.with_postgre import PostgresDB
 from utils.get_suggestions import get_suggestions
-from prompt.prompt_agency import PromptAgency
+from prompt.prompts_mart import *
 
 # 표준 라이브러리
 import json
@@ -57,7 +58,6 @@ class MartAssistant:
     def __init__(self, vectorstore: FAISS, openai_api_key: str):
         self.llm = ChatOpenAI(model="gpt-4o", openai_api_key=openai_api_key)
         self.db = PostgresDB()
-        self.prompts = PromptAgency()  # PromptAgency 인스턴스 생성
         self.retriever = vectorstore.as_retriever(search_type="mmr", search_kwargs={'k': 5}) if vectorstore else None
         self.chart_counter = 1  # 차트 파일 명 생성보드 큰수 설정
         self.build_graph()
@@ -83,7 +83,11 @@ class MartAssistant:
         print(f"😀 [Supervisor] 인사이트 생성 여부: {insights_generated}")
 
         if not dataframe_generated:
-            prompt = self.prompts.get_supervisor_prompt()
+            prompt = PromptTemplate.from_template(PROMPT_SUPERVISOR)
+            prompt = ChatPromptTemplate.from_messages([
+                    ("system", PROMPT_SUPERVISOR),
+                    ("user", "\n질문:\n{messages}"),
+            ])
             chain = prompt | self.llm.with_structured_output(Router)
             response = chain.invoke({"messages": state['messages'][0].content})
             print(f"😀 [Supervisor] 데이터 분석 요청 여부 판단: {response.next}")
@@ -109,7 +113,11 @@ class MartAssistant:
 
         state.setdefault("documents", [])
         document_texts = [doc.page_content if isinstance(doc, Document) else str(doc) for doc in state["documents"]]
-        prompt = self.prompts.get_sql_builder_prompt(schema_name=schema_name)
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", PROMPT_SQL_BUILDER.format(schema_name=schema_name)),
+            ("user", "\n질문:\n{messages}"),
+            ("user", "\ndocument:\n{documents}")
+        ])  
 
         query_chain = prompt | self.llm.with_structured_output(SQLQuery)
         response = query_chain.invoke({"messages": state["messages"][0].content, "documents": document_texts})
@@ -167,10 +175,12 @@ class MartAssistant:
                 "messages": [AIMessage(content="쿼리 및 오류 메시지를 분석할 수 없습니다. 수동 검토가 필요합니다.")]
             }, goto="__end__")
 
-        prompt = self.prompts.get_sql_rebuilder_prompt()
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", PROMPT_SQL_REBUILDER.format(sql_query=query, error_message=error_message)),
+        ])  
         query_chain = prompt | self.llm.with_structured_output(SQLQuery)
 
-        response = query_chain.invoke({"sql_query": query, "error_message": error_message})
+        response = query_chain.invoke()
         new_query = response.query
 
         print(f"🗻 [SQL_Rebuilder] 수정된 쿼리: {new_query}")
@@ -200,14 +210,19 @@ class MartAssistant:
 
 
     def insight_builder(self, state: State) -> Command:
-        prompt = self.prompts.get_insight_builder_prompt()
+        prompt = PromptTemplate.from_template(PROMPT_INSIGHT_BUILDER)
         dataframe_text = state.get("dataframe", "No dataframe generated.") 
 
         insight_chain = prompt | self.llm
         insight = insight_chain.invoke({"question": state["messages"][0].content, "dataframe": dataframe_text}).content
         print(f"🌀 [Insight_Builder] 생성된 인사이트:\n {insight}")
 
-        prompt = self.prompts.get_chart_decision_prompt()
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", PROMPT_CHART_DECISION),
+            ("user", "\n질문:\n{question}"),
+            ("user", "\ndataframe:\n{dataframe}"),
+            ("user", "\ninsights:\n{insights}")
+        ])          
         decision_chain = prompt | self.llm
         decision = decision_chain.invoke({"question": state["messages"][0].content, "dataframe": dataframe_text, "insights" : insight}).content.strip().lower()
         print(f"🌀 [Insight_Builder] 차트 필요여부 판단: {decision}")
@@ -227,7 +242,12 @@ class MartAssistant:
             print("🌀 [Chart_Builder] 차트 생성 건너뜀")
             return Command(update={"chart_filename": None}, goto=END)
         
-        prompt = self.prompts.get_chart_builder_prompt()
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", PROMPT_CHART_BUILDER),
+            ("user", "\n질문:\n{question}"),
+            ("user", "\ndataframe:\n{dataframe}"),
+            ("user", "\ninsights:\n{insights}")
+        ])
         dataframe_text = state.get("dataframe", "No dataframe generated.") 
         insights_text = state.get("insights", "No insights generated.")
 

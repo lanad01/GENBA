@@ -10,13 +10,6 @@ class PromptAgency:
     def __init__(self):
         self.input_handler = InputHandler_file_only()
 
-    def get_data_extraction_prompt(self):
-        return ChatPromptTemplate.from_messages([
-            ("system", self.input_handler.read_file('02_prompt_data_extraction.txt')),
-            ("user", "### Messages:\n{messages}")
-            ("user", "### recommended_schema:\n{recommended_schema}")
-        ])
-
     def get_supervisor_prompt(self):
         return ChatPromptTemplate.from_messages([
             ("system", self.input_handler.read_file('prompt_supervisor.txt')),

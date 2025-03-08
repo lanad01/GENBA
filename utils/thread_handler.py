@@ -7,6 +7,7 @@ from utils.vector_handler import delete_thread_vectorstore
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 from typing import Optional
+import pandas as pd
 
 # ✅ 쓰레드 저장 경로 설정
 THREADS_DB_PATH = "./threads"
@@ -84,11 +85,25 @@ def load_thread(thread_id):
 
     if os.path.exists(thread_path):
         with open(thread_path, "r", encoding="utf-8") as f:
-            return json.load(f)
+            thread_data = json.load(f)
+            
+            # 메시지 내의 Dict to DataFrame 
+            if "messages" in thread_data:
+                for message in thread_data["messages"]:
+                    if "analytic_result" in message:
+                        for key, value in message["analytic_result"].items():
+                            if isinstance(value, dict) and value.get('type') == 'dataframe' and 'data' in value:
+                                # DataFrame으로 변환
+                                try:
+                                    message["analytic_result"][key] = pd.DataFrame(value['data'])
+                                except Exception as e:
+                                    print(f"DataFrame 변환 오류: {e}")
+            
+            return thread_data
     
     return None
 
-def sanitize_message_for_json(message):
+def sanitize_message_for_json(result):
     """메시지 객체를 JSON 직렬화 가능한 형태로 변환"""
     LIMIT_SIZE = 100
     
@@ -98,59 +113,53 @@ def sanitize_message_for_json(message):
             return dict(list(d.items())[:max_items])
         return d
 
-    if isinstance(message, dict):
-        sanitized = {}
-        for key, value in message.items():
-            if key == 'analytic_result':
-                # DataFrame이나 복잡한 객체를 포함할 수 있는 analytic_result 처리
-                if isinstance(value, dict):
-                    sanitized[key] = {}
-                    # 최상위 딕셔너리 크기 제한
-                    limited_value = limit_dict_size(value)
-                    for k, v in limited_value.items():
-                        if hasattr(v, 'to_dict'):  # DataFrame인 경우
-                            # 최대 50행만 저장
-                            if hasattr(v, 'head'):
-                                sanitized[key][k] = v.head(LIMIT_SIZE).to_dict()
-                            else:
-                                sanitized[key][k] = v.to_dict()
-                        elif isinstance(v, (list, dict)):  # 중첩된 구조체인 경우
-                            try:
-                                if isinstance(v, dict):
-                                    sanitized[key][k] = limit_dict_size(v)
-                                elif isinstance(v, list):
-                                    sanitized[key][k] = v[:LIMIT_SIZE]  # 리스트도 50개로 제한
-                                else:
-                                    sanitized[key][k] = v
-                            except:
-                                sanitized[key][k] = str(v)
-                        else:
-                            sanitized[key][k] = str(v)
-                else:
-                    # DataFrame이거나 다른 복잡한 객체인 경우
-                    if hasattr(value, 'to_dict'):
-                        if hasattr(value, 'head'):
-                            sanitized[key] = value.head(LIMIT_SIZE).to_dict()
-                        else:
-                            sanitized[key] = value.to_dict()
-                    else:
-                        sanitized[key] = str(value)
-            elif key in ['feedback', 'feedback_point']:  # feedback 관련 필드는 특별 처리
-                if isinstance(value, (list, tuple)):
-                    sanitized[key] = value[:LIMIT_SIZE]  # 리스트인 경우 크기 제한
-                else:
-                    sanitized[key] = value  # 문자열이나 다른 타입은 그대로 저장
-            else:
-                # 다른 키들도 딕셔너리/리스트인 경우 크기 제한 적용
-                if isinstance(value, dict):
-                    sanitized[key] = limit_dict_size(value)
-                elif isinstance(value, list):
-                    sanitized[key] = value[:LIMIT_SIZE]  # 리스트도 크기 제한
-                else:
-                    sanitized[key] = value
-        return sanitized
-    return message
+    def convert_timestamp(obj):
+        """Timestamp 객체를 문자열로 변환하는 헬퍼 함수"""
+        if hasattr(obj, 'timestamp'):  # Timestamp 객체 확인
+            return obj.strftime('%Y-%m-%d %H:%M:%S')
+        return obj
 
+    if isinstance(result, dict):
+        sanitized = {}
+        
+        for key, value in result.items():
+            # Timestamp 키와 값을 한 번에 처리
+            value = convert_timestamp(value)
+            
+            # DataFrame이나 복잡한 객체를 포함할 수 있는 analytic_result 처리
+            if isinstance(value, dict):
+                sanitized[key] = {}
+                # 최상위 딕셔너리 크기 제한
+                limited_value = limit_dict_size(value)
+                for k, v in limited_value.items():
+                    v = convert_timestamp(v)  # 중첩된 Timestamp 값 처리
+                    if hasattr(v, 'to_dict'):  # DataFrame인 경우
+                        # DataFrame 정보 저장 (타입 정보 포함)
+                        sanitized[key][k] = {
+                            'type': 'dataframe',
+                            'data': v.head(LIMIT_SIZE).to_dict('records')
+                        }
+                    elif isinstance(v, (list, dict)):  # 중첩된 구조체인 경우
+                        try:
+                            if isinstance(v, dict):
+                                sanitized[key][k] = limit_dict_size(v)
+                            elif isinstance(v, list):
+                                sanitized[key][k] = [convert_timestamp(item) for item in v[:LIMIT_SIZE]]  # 리스트도 50개로 제한
+                            else:
+                                sanitized[key][k] = v
+                        except:
+                            sanitized[key][k] = str(v)
+                    else:
+                        sanitized[key][k] = v  # 원시 타입은 그대로 저장
+            elif hasattr(value, 'to_dict'):  # 최상위 레벨의 DataFrame 처리
+                sanitized[key] = {
+                    'type': 'dataframe',
+                    'data': value.head(LIMIT_SIZE).to_dict('records')
+                }
+            else:
+                sanitized[key] = value  # 기타 타입은 그대로 저장
+        return sanitized
+    return result
 
 def save_thread(internal_id, response_data):
     """특정 쓰레드의 대화 이력을 저장"""
@@ -169,11 +178,8 @@ def save_thread(internal_id, response_data):
             continue
         
         # 사용자 메시지인 경우 질문 번호 증가
-        if msg["role"] == "user":
-            question_count += 1
-            question_id = f"{internal_id}_{question_count}"
-        else:
-            question_id = f"{internal_id}_{question_count}"
+        question_count += 1
+        question_id = f"{internal_id}_{question_count}"
 
         normalized_msg = {
             "role": msg["role"],
@@ -194,9 +200,11 @@ def save_thread(internal_id, response_data):
                     "feedback_point": msg.get("feedback_point")
                 }
                 normalized_msg.update(additional_fields)
+                
                 # JSON 직렬화를 위해 메시지 정규화
-                normalized_msg = sanitize_message_for_json(normalized_msg)
-
+                if "analytic_result" in normalized_msg:
+                    normalized_msg["analytic_result"] = sanitize_message_for_json(normalized_msg["analytic_result"])
+                
             # generated_code 필드 추가 (에러 발생 시에도 코드 유지)
             if "generated_code" in msg: normalized_msg["generated_code"] = msg.get("generated_code")
                 
@@ -247,13 +255,13 @@ def delete_thread(internal_id):
         print(f"❌ 스레드 삭제 중 오류 발생: {e}")
         return False
 
-def get_parent_message(internal_id: str, parent_question_id: str) -> Optional[dict]:
+def get_parent_message(internal_id: str, question_id: str) -> Optional[dict]:
     """
-    주어진 parent_question_id에 해당하는 메시지의 분석 정보를 가져옵니다.
+    주어진 question_id 해당하는 메시지의 분석 정보를 가져옵니다.
     
     Args:
         internal_id (str): 스레드 내부 ID
-        parent_question_id (str): 부모 질문 ID
+        question_id (str): 부모 질문 ID
     
     Returns:
         Optional[dict]: 부모 메시지의 분석 정보를 담은 딕셔너리 또는 None
@@ -263,7 +271,7 @@ def get_parent_message(internal_id: str, parent_question_id: str) -> Optional[di
     
     if thread_data and "messages" in thread_data:
         for msg in thread_data["messages"]:
-            if msg.get("question_id") == parent_question_id:
+            if msg.get("question_id") == question_id:
                 if msg.get("role") == "user":
                     parent_message = {'query': msg.get('content', '')}
                 elif msg.get("role") == "assistant":

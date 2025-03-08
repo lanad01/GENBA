@@ -19,7 +19,7 @@ from langchain.schema import Document
 
 from utils.with_postgre import PostgresDB
 from utils.get_suggestions import get_suggestions
-from prompt.prompt_agency import PromptAgency
+from prompt.archive.prompt_agency import PromptAgency
 
 schema_name = "biz"
 num_db_return = 20

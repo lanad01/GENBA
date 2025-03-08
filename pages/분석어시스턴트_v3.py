@@ -195,7 +195,9 @@ def render_mart_selector():
     show_mart_manager = st.session_state.get(f"{internal_id}_show_mart_manager", False)
 
     with st.container():
-        left_content, middle_content, right_content = st.columns([0.3, 0.3, 0.4])
+        
+        # 마트 선택 UI 렌더링 컬럼 분할
+        left_content, middle_content, right_content = st.columns([0.5, 0.4, 0.1])
         
         # 마트 목록 표시 버튼(on & off)
         with left_content:
@@ -247,19 +249,7 @@ def render_mart_selector():
                 st.session_state[f"{internal_id}_show_mart_manager"] = not show_mart_manager
                 st.rerun()
 
-        # API Key 상태 표시
-        with right_content:
-            st.markdown(
-                """
-                <div style='float: right;'>
-                    <span style='background-color: #E8F0FE; padding: 5px 10px; border-radius: 5px;'>
-                        ✅ API Key
-                    </span>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
+            
     # 마트 선택
     if show_mart_manager:
         with st.container():
@@ -354,7 +344,7 @@ def render_sidebar_chat():
                     for message in messages:
                         # print(f"🔢 [render_sidebar_chat] 스레드 전환: {message['analytic_result']}")
                         if "analytic_result" in message and message["analytic_result"]:
-                            # 문자열로 저장된 DataFrame을 다시 DataFrame으로 변환
+                            # dict 형태로 저장된 DataFrame을 다시 DataFrame으로 변환
                             try:
                                 if isinstance(message["analytic_result"], dict):
                                     for key, value in message["analytic_result"].items():
@@ -429,7 +419,6 @@ def render_sidebar_document():
     # 등록된 문서 목록
     st.sidebar.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
     st.sidebar.markdown("##### 📑 등록된 문서 목록")
-    
     document_list = load_document_list(document_list_path=DOCUMENT_LIST_PATH)
     if document_list:
         for doc in document_list:
@@ -441,8 +430,7 @@ def render_sidebar_document():
                     try:
                         # 문서 파일 삭제
                         doc_path = Path(f"../documents/{doc}")
-                        if doc_path.exists():
-                            os.remove(doc_path)
+                        if doc_path.exists(): os.remove(doc_path)
                         
                         # vectorstore 재구축
                         if rebuild_vectorstore_without_document(doc, DOCUMENT_LIST_PATH):
@@ -458,7 +446,6 @@ def render_sidebar_document():
     else:
         st.sidebar.info("등록된 문서가 없습니다.")
 
-
 @st.fragment
 def render_chat_interface():
     """채팅 인터페이스 렌더링"""
@@ -472,28 +459,33 @@ def render_chat_interface():
                 continue
 
             with st.chat_message(message["role"]):
-
-                if "error_message" in message:
-                    st.error(f"⚠️ 오류 발생: {message['error_message']}")
+                if "error_message" in message :
+                    if message['error_message'] is not None and message['error_message'] != {}:
+                        st.error(f"⚠️ 오류 발생:\n {message['error_message']}")
 
                 # ✅ 일반 텍스트 메시지 출력 (질문 및 일반 답변)
-                if "content" in message and message["content"]:
+                if "content" in message :
                     if message["role"] == "assistant":
-                        if message["content"] != "안녕하세요! AI 분석 어시스턴트입니다. 무엇이든 물어보세요!":
-                            st.markdown("💬 **응답**")
-                        st.markdown(message["content"])
+                        if "error_message" in message :
+                            if message['error_message'] is not None and message['error_message'] == {}:
+                                st.markdown(message["content"])
+                        else :
+                            if message["content"] != "안녕하세요! AI 분석 어시스턴트입니다. 무엇이든 물어보세요!":
+                                st.markdown("💬 **응답**")
+   
                     else:
                         st.write(message["content"])
 
                 # ✅ 생성된 코드 출력 (에러가 있을 때만)
                 if "error_message" in message and "generated_code" in message and message["generated_code"]:
-                    st.markdown("""\n##### 🔢 생성된 코드 (에러 발생)\n""")
-                    code_to_display = message["generated_code"]
-                    if "```python" in code_to_display:
-                        code_to_display = code_to_display.split("```python")[1].split("```")[0]
-                    elif "```" in code_to_display:
-                        code_to_display = code_to_display.split("```")[1]
-                    st.code(code_to_display, language="python")
+                    if message['error_message'] is not None:
+                        st.markdown("""\n##### 🔢 생성된 코드 (에러 발생)\n""")
+                        code_to_display = message["generated_code"]
+                        if "```python" in code_to_display:
+                            code_to_display = code_to_display.split("```python")[1].split("```")[0]
+                        elif "```" in code_to_display:
+                            code_to_display = code_to_display.split("```")[1]
+                        st.code(code_to_display, language="python", )
 
                 # ✅ 실행된 코드 출력
                 if "validated_code" in message and message["validated_code"]:
@@ -503,23 +495,46 @@ def render_chat_interface():
                 # ✅ 분석 결과 (테이블)
                 if "analytic_result" in message and message["analytic_result"]:
                     st.divider()
-                    st.markdown("""\n##### 📑 분석 결과\n""")                
-                    if isinstance(message["analytic_result"], dict):
-                        for key, value in message["analytic_result"].items():
-                            st.markdown(f"#### {key}")
-                            if isinstance(value, pd.DataFrame):
-                                if value.shape[0] <= 10:
-                                    st.dataframe(value, use_container_width=True, )
-                                else:
-                                    st.dataframe(value.head(50), use_container_width=True, )
+                    # 타임아웃으로 인한 샘플 결과인 경우 경고 표시
+                    if message.get("is_sample_result", False):
+                        st.warning("⚠️ 전체 데이터 실행 시간 초과로 샘플 데이터(50개) 결과를 표시합니다.")
+                        
+                    st.markdown("""\n##### 📑 분석 결과\n""")
+                    # print(f"🔢 [render_chat_interface] | analytic_result: {message['analytic_result']}")       
+                          
+                    for key, value in message["analytic_result"].items():
+                        st.markdown(f"#### {key}")
+                        print(f"🔢 [render_chat_interface] | key : {key} | type: {type(value)}")
+                        
+                        # DataFrame 타입 확인 및 처리
+                        if isinstance(value, dict) and value.get('type') == 'dataframe' and 'data' in value:
+                            # 저장된 DataFrame 데이터를 다시 DataFrame으로 변환
+                            df = pd.DataFrame(value['data'])
+                            if not df.empty:
+                                st.dataframe(df, use_container_width=True)
+                            else:
+                                st.info("데이터가 없습니다.")
+                        elif isinstance(value, pd.DataFrame):
+                            # 직접 DataFrame인 경우
+                            if value.shape[0] <= 10:
+                                st.dataframe(value, use_container_width=True)
+                            else:
+                                st.dataframe(value.head(50), use_container_width=True)
+                        elif isinstance(value, dict):
+                            # 일반 딕셔너리인 경우
+                            st.json(value)
+                        elif isinstance(value, list):
+                            # 리스트인 경우
+                            if len(value) > 0 and isinstance(value[0], dict):
+                                # 딕셔너리 리스트는 DataFrame으로 변환하여 표시
+                                df = pd.DataFrame(value)
+                                st.dataframe(df, use_container_width=True)
                             else:
                                 st.write(value)
-                    else:
-                        df_result = pd.DataFrame(message["analytic_result"])
-                        if df_result.shape[0] <= 10:
-                            st.dataframe(df_result, use_container_width=True, )
                         else:
-                            st.dataframe(df_result.head(50), use_container_width=True, )
+                            # 기타 타입
+                            st.write(value)
+                  
 
                 # ✅ 차트 출력
                 if "chart_filename" in message:
@@ -535,7 +550,7 @@ def render_chat_interface():
                 if "insights" in message and message["insights"]:
                     st.divider()
                     st.markdown("""\n##### 📑 분석 인사이트\n""")
-                    st.text_area(message["insights"])
+                    st.markdown(message["insights"])
 
                 # ✅ 리포트 텍스트 출력
                 if "report" in message and message["report"]:
@@ -545,7 +560,7 @@ def render_chat_interface():
                     """)
                     st.markdown(message["report"])
 
-                # ✅ 7. 피드백 텍스트 출력
+                # ✅ 피드백 텍스트 출력
                 if "feedback" in message and message["feedback"]:
                     st.divider()
                     st.markdown("""
@@ -553,7 +568,7 @@ def render_chat_interface():
                     """)
                     st.markdown(message["feedback"])
 
-                # ✅ 8. 상세 분석 제안
+                # ✅ 상세 분석 제안
                 if "feedback_point" in message and message["feedback_point"]:
                     st.divider()
                     st.markdown("""
@@ -562,31 +577,28 @@ def render_chat_interface():
                     
                     # 피드백 포인트가 문자열인 경우 리스트로 변환
                     feedback_points = message["feedback_point"]
-                    if isinstance(feedback_points, str):
-                        # 문자열을 리스트로 변환 (쉼표, 줄바꿈 등으로 구분된 경우)
-                        feedback_points = re.split(r'[,\n]+', feedback_points)
-                        feedback_points = [point.strip() for point in feedback_points if point.strip()]
                     
                     # 버튼 생성을 위한 컬럼 레이아웃
                     cols = st.columns(min(2, len(feedback_points)))
                     
                     # 현재 메시지의 question_id 가져오기
                     current_question_id = message.get("question_id", "")
-                    
                     # print(f"🔢 [render_chat_interface] 제안드리는 상세 분석 목록 버튼별 id: {current_question_id}")
 
+                    # 상세 분석 제안 목록 버튼 생성
                     for i, point in enumerate(feedback_points):
                         with cols[i % len(cols)]:
                             # 각 제안을 버튼으로 표시
                             if st.button(
                                 f"♣ {point}", 
-                                key=f"analysis_btn_{current_question_id}_{i}",
+                                # key=f"analysis_btn_{current_question_id}_{i}",  # 고유한 키 생성
                                 use_container_width=True,
                                 type="secondary"
                             ):
-                                print(f"🔢 [render_chat_interface] 제안드리는 상세 분석 목록 버튼 클릭: {current_question_id}")
-                                # 현재 thread json 파일에서 parent_question_id에 해당하는 메시지 정보 가져오기
+                                # print(f"🔢 [render_chat_interface] 제안드리는 상세 분석 목록 버튼 클릭: {current_question_id}")
+                                # 현재 thread json 파일에서 question_id에 해당하는 메시지 정보 가져오기
                                 thread_data = load_thread(get_page_state(PAGE_NAME, "internal_id"))
+                                # print(f"🔢 [render_chat_interface] thread_data: {thread_data}")
                                 if thread_data and "messages" in thread_data:
                                     parent_message = None
                                     for msg in thread_data["messages"]:
@@ -600,8 +612,7 @@ def render_chat_interface():
                                         
                                         # 세션 상태에 자동 생성된 질의와 부모 질문 ID 저장
                                         st.session_state["auto_generated_query"] = auto_query
-                                        st.session_state["auto_feedback_point"] = point
-                                        st.session_state["parent_question_id"] = current_question_id
+                                        st.session_state["question_id"] = current_question_id
                                         
                                         # 페이지 리로드 (자동 질의 처리를 위해)
                                         st.rerun()
@@ -615,8 +626,7 @@ def process_chat_input():
     
     # 자동 생성된 질의가 있는지 확인
     auto_query = st.session_state.get("auto_generated_query", None)
-    auto_feedback_point = st.session_state.get("auto_feedback_point", None)
-    parent_question_id = st.session_state.get("parent_question_id", None)
+    question_id = st.session_state.get("question_id", None)
     internal_id=get_page_state(PAGE_NAME, "internal_id")
     
     # 사용자 입력 또는 자동 생성된 질의 처리
@@ -625,13 +635,12 @@ def process_chat_input():
         disabled=is_processing, # 처리 중일때 입력 비활성화
         key="chat_input"
     )) or auto_query:
-        print(f"🔢 [process_chat_input] 부모 질문 ID: {parent_question_id}")
+        print(f"🔢 [process_chat_input] 부모 질문 ID: {question_id}")
         
         # ✅ JavaScript 스크롤 기능 추가 (랜덤 ID 적용)
-        random_id = random.randint(1000, 9999)
         js_code = f"""
         <div id="scroll-to-me" style='height: 1px;'></div>
-        <script id="{random_id}">
+        <script id="{random.randint(1000, 9999)}">
             var e = document.getElementById("scroll-to-me");
             if (e) {{
                 e.scrollIntoView({{behavior: "smooth"}});
@@ -647,16 +656,15 @@ def process_chat_input():
             query = auto_query
             
             # 부모 메시지 정보 가져오기
-            if parent_question_id:
+            if question_id:
                 parent_message = get_parent_message(
                     internal_id=internal_id,
-                    parent_question_id=parent_question_id
+                    question_id=question_id
                 )
             
             # 세션 상태에서 임시 데이터 제거
             del st.session_state["auto_generated_query"]
-            if auto_feedback_point: del st.session_state["auto_feedback_point"]
-            if parent_question_id: del st.session_state["parent_question_id"]
+            if question_id: del st.session_state["question_id"]
         
         # ✅ 마트 데이터 로드
         load_mart_data()
@@ -672,22 +680,16 @@ def process_chat_input():
         with st.chat_message("assistant"):
             with st.spinner("🔍 답변을 생성 중..."):
                 # 자동 생성된 질의인 경우 Analytics부터 시작하도록 설정
-                start_from_analytics = True if auto_feedback_point else False
+                start_from_analytics = True if auto_query else False
                 
                 response_data = process_chat_response(
                     st.session_state[f"{PAGE_NAME}_assistant"], 
                     query,
                     internal_id=get_page_state(PAGE_NAME, "internal_id"),
                     start_from_analytics=start_from_analytics,
-                    feedback_point=auto_feedback_point if auto_feedback_point else None,
+                    feedback_point=auto_query if auto_query else None,
                     parent_message=parent_message
                 )
-                
-                # 부모 질문 ID가 있는 경우 응답 데이터에 추가
-                if parent_question_id:
-                    response_data["parent_question_id"] = parent_question_id
-
-
         # 메시지 상태 업데이트
         messages = get_page_state(PAGE_NAME, "messages", [])
         messages.append(response_data)  # 새로운 응답 메시지를 추가

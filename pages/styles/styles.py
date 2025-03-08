@@ -43,7 +43,6 @@ def apply_custom_styles():
             }
             
             .stChatMessage { max-width: 90% !important; }
-            .stMarkdown { font-size: 16px; }
             .reference-doc { font-size: 12px !important; }
             table { font-size: 12px !important; }
             

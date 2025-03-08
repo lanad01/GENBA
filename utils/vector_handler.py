@@ -6,7 +6,7 @@ from pathlib import Path
 
 # 서드파티 라이브러리
 import pandas as pd
-from langchain_community.embeddings import OpenAIEmbeddings
+from langchain_openai import OpenAIEmbeddings
 from langchain.schema import Document
 from langchain_community.vectorstores import FAISS
 from langchain.text_splitter import RecursiveCharacterTextSplitter # type: ignore

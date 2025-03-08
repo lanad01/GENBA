@@ -1,0 +1,160 @@
+{
+  "login_id": "KSW",
+  "thread_id": "Customer Churn Characteristics",
+  "created_at": "1ecd4d5f-a2f3-4f7c-bcd3-20f8719ebec8",
+  "internal_id": "temp_KSW_20250307_1355",
+  "active_marts": [
+    "cust_intg",
+    "cust_enroll_history"
+  ],
+  "question_count": 3,
+  "messages": [
+    {
+      "role": "assistant",
+      "content": "안녕하세요! AI 분석 어시스턴트입니다. 무엇이든 물어보세요!",
+      "question_id": "temp_KSW_20250307_1355_0"
+    },
+    {
+      "role": "user",
+      "content": "고객의 결혼 여부가 보험 가입 패턴에 미치는 영향을 분석할 수 있을까요?",
+      "question_id": "temp_KSW_20250307_1355_1"
+    },
+    {
+      "role": "assistant",
+      "content": "분석이 완료되었습니다! 아래 결과를 확인해주세요.",
+      "question_id": "temp_KSW_20250307_1355_1",
+      "validated_code": "```python\n# 'cust_intg' 데이터프레임에는 고객의 결혼 여부에 대한 정보가 없습니다.\n# 따라서 결혼 여부에 따른 보험 가입 패턴을 직접적으로 분석할 수 없습니다.\n# 대신, 다른 관련된 분석을 수행할 수 있습니다.\n\n# 예를 들어, 고객의 나이대와 보험 가입 패턴을 분석해보겠습니다.\n\n# 필요한 라이브러리 임포트\nimport pandas as pd\n\n# 나이대별 보험 가입 패턴 분석\nage_group_enrollments = cust_intg.groupby('나이')['유지계약건수'].sum().reset_index()\n\n# 결과 저장\nanalytic_result = {\n    'age_group_enrollments': age_group_enrollments.round(2).head()\n}\n\n# 결과 출력\nprint(age_group_enrollments.round(2))\n```",
+      "chart_filename": "../img/chart_20250307135624.png",
+      "analytic_result": {
+        "age_group_enrollments": {
+          "나이": {
+            "0": "10대",
+            "1": "10세미만",
+            "2": "20대",
+            "3": "30대",
+            "4": "40대"
+          },
+          "유지계약건수": {
+            "0": 1069.09,
+            "1": 738.52,
+            "2": 5177.08,
+            "3": 10268.31,
+            "4": 18983.92
+          }
+        }
+      },
+      "insights": "1. 주요 발견사항\n   - 보험 가입 패턴을 분석한 결과, 30대와 40대 고객이 가장 많은 보험 계약을 유지하고 있는 것으로 나타났습니다. 이는 일반적으로 이 연령대가 경제적으로 안정되고 가족을 부양할 가능성이 높기 때문일 수 있습니다.\n\n2. 특이점\n   - 20대의 보험 유지 계약 건수가 10대와 10세 미만보다 높지만, 30대와 40대에 비해 상대적으로 낮은 수준입니다. 이는 20대가 아직 경제적으로 완전히 독립하지 않았거나 보험의 필요성을 덜 느끼기 때문일 수 있습니다.\n\n3. 추천 사항\n   - 결혼 여부가 보험 가입 패턴에 미치는 영향을 구체적으로 분석하기 위해, 결혼 여부에 따른 보험 가입 데이터가 필요합니다. 결혼 여부와 보험 가입 패턴 간의 상관관계를 파악하기 위해 추가적인 데이터 수집 및 분석을 권장합니다.\n   - 30대와 40대의 높은 보험 유지 계약 건수를 고려하여, 이 연령대의 고객을 대상으로 한 맞춤형 보험 상품 개발 및 마케팅 전략을 강화하는 것이 좋습니다.\n   - 20대 고객을 대상으로 보험의 필요성과 혜택을 강조하는 교육 및 홍보 캠페인을 통해 이들의 보험 가입을 유도할 수 있는 전략을 마련하는 것이 필요합니다.",
+      "report": "1. 요약  \n30대와 40대가 가장 많은 보험 계약을 유지 중입니다.\n\n2. 분석 방법  \n연령대별 보험 유지 계약 건수를 분석했습니다.\n\n3. 주요 발견사항  \n30대와 40대의 보험 유지 계약 건수가 가장 높습니다.\n\n4. 결론 및 제언  \n결혼 여부와 보험 가입 패턴 분석을 위해 추가 데이터 필요.",
+      "feedback": "1. 부족한 영역\n   사용자의 요청은 고객의 결혼 여부가 보험 가입 패턴에 미치는 영향을 분석하는 것이지만, 제공된 데이터에는 결혼 여부에 대한 정보가 포함되어 있지 않습니다. 따라서 결혼 여부와 보험 가입 패턴 간의 관계를 직접적으로 분석할 수 없습니다. 현재 분석은 나이대별 보험 가입 패턴에 초점을 맞추고 있으며, 이는 사용자의 요청과는 다른 분석 방향입니다.\n\n2. 상세한 보완 방법\n   1. **데이터 수집 및 전처리**: 결혼 여부에 대한 데이터를 수집하여 기존 데이터셋에 통합해야 합니다. 이 정보는 고객 설문조사, crm 시스템, 또는 외부 데이터 소스에서 얻을 수 있습니다.\n   \n   2. **교차분석 (cross-tabulation)**: 결혼 여부와 보험 가입 패턴 간의 관계를 탐색하기 위해 교차분석을 사용할 수 있습니다. **교차분석**은 두 개 이상의 범주형 변수 간의 관계를 분석하는 방법으로, 결혼 여부와 보험 가입 여부를 교차표로 나타내어 관계를 시각적으로 파악할 수 있습니다.\n   \n   3. **로지스틱 회귀분석 (logistic regression)**: 결혼 여부가 보험 가입 여부에 미치는 영향을 정량적으로 분석하기 위해 로지스틱 회귀분석을 사용할 수 있습니다. **로지스틱 회귀분석**은 종속 변수가 이진형(예: 가입/미가입)일 때 독립 변수(예: 결혼 여부)가 종속 변수에 미치는 영향을 분석하는 데 유용합니다.\n   \n   4. **혼합효과 모델 (mixed-effects model)**: 결혼 여부 외에도 나이, 소득, 직업 등 다른 변수들이 보험 가입 패턴에 영향을 미칠 수 있습니다. **혼합효과 모델**은 이러한 고정 효과와 랜덤 효과를 동시에 고려하여 분석할 수 있는 방법입니다.\n   \n   5. **의사결정나무 (decision tree)**: 결혼 여부를 포함한 여러 변수들이 보험 가입에 미치는 영향을 시각적으로 이해하기 위해 의사결정나무를 사용할 수 있습니다. **의사결정나무**는 데이터의 분류 및 회귀 문제를 해결하는 데 사용되며, 변수 간의 상호작용을 쉽게 파악할 수 있습니다.\n\n3. 기대효과\n   - 결혼 여부와 보험 가입 패턴 간의 관계를 명확히 이해할 수 있으며, 이를 통해 마케팅 전략을 개선할 수 있습니다.\n   - 결혼 여부 외에도 다른 변수들이 보험 가입에 미치는 영향을 파악하여 보다 정교한 고객 세분화 및 타겟팅이 가능해집니다.\n   - 다양한 분석 방법론을 통해 데이터의 다양한 측면을 탐색함으로써 보다 포괄적이고 깊이 있는 인사이트를 얻을 수 있습니다.",
+      "feedback_point": [
+        "의사결정나무를 활용한 변수 중요도 분석",
+        "혼합효과 모델을 통한 다변량 분석",
+        "로지스틱 회귀분석을 통한 이진 분류"
+      ],
+      "generated_code": "```python\n# 'cust_intg' 데이터프레임에는 고객의 결혼 여부에 대한 정보가 없습니다.\n# 따라서 결혼 여부에 따른 보험 가입 패턴을 직접적으로 분석할 수 없습니다.\n# 대신, 다른 관련된 분석을 수행할 수 있습니다.\n\n# 예를 들어, 고객의 나이대와 보험 가입 패턴을 분석해보겠습니다.\n\n# 필요한 라이브러리 임포트\nimport pandas as pd\n\n# 나이대별 보험 가입 패턴 분석\nage_group_enrollments = cust_intg.groupby('나이')['유지계약건수'].sum().reset_index()\n\n# 결과 저장\nanalytic_result = {\n    'age_group_enrollments': age_group_enrollments.round(2).head()\n}\n\n# 결과 출력\nprint(age_group_enrollments.round(2))\n```",
+      "error_message": null
+    },
+    {
+      "role": "user",
+      "content": "추가 데이터 분석 요청 : 로지스틱 회귀분석을 통한 이진 분류",
+      "question_id": "temp_KSW_20250307_1355_2"
+    },
+    {
+      "role": "assistant",
+      "content": "분석이 완료되었습니다! 아래 결과를 확인해주세요.",
+      "question_id": "temp_KSW_20250307_1355_2",
+      "validated_code": "```python\nfrom sklearn.model_selection import train_test_split\nfrom sklearn.linear_model import LogisticRegression\nfrom sklearn.metrics import accuracy_score, confusion_matrix, classification_report\nfrom sklearn.impute import SimpleImputer\nimport pandas as pd\n\n# 데이터 준비\nX = cust_intg[['나이', '성별코드', 'CB신용평점', '보험연령', '유지계약건수']]\nX = pd.get_dummies(X, columns=['나이', '성별코드'], drop_first=True)\ny = cust_intg['당월이탈고객여부']\n\n# 결측치 처리\nimputer = SimpleImputer(strategy='mean')\nX = imputer.fit_transform(X)\n\n# 데이터 분할\nX_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)\n\n# 로지스틱 회귀 모델 생성 및 학습\nmodel = LogisticRegression(max_iter=1000)\nmodel.fit(X_train, y_train)\n\n# 예측\ny_pred = model.predict(X_test)\n\n# 평가\naccuracy = accuracy_score(y_test, y_pred)\nconf_matrix = confusion_matrix(y_test, y_pred)\nclass_report = classification_report(y_test, y_pred, output_dict=True)\n\n# 결과 저장\nanalytic_result = {\n    'accuracy': round(accuracy, 2),\n    'confusion_matrix': conf_matrix,\n    'classification_report': class_report\n}\n\n# 결과 출력\nprint('Accuracy:', round(accuracy, 2))\nprint('Confusion Matrix:\\n', conf_matrix)\nprint('Classification Report:\\n', pd.DataFrame(class_report).round(2))\n```",
+      "chart_filename": "../img/chart_20250307135839.png",
+      "analytic_result": {
+        "accuracy": "0.6",
+        "confusion_matrix": "[[21569     0]\n [14431     0]]",
+        "classification_report": {
+          "0": {
+            "precision": 0.5991388888888889,
+            "recall": 1.0,
+            "f1-score": 0.7493268946829023,
+            "support": 21569.0
+          },
+          "1": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1-score": 0.0,
+            "support": 14431.0
+          },
+          "accuracy": 0.5991388888888889,
+          "macro avg": {
+            "precision": 0.29956944444444444,
+            "recall": 0.5,
+            "f1-score": 0.37466344734145113,
+            "support": 36000.0
+          },
+          "weighted avg": {
+            "precision": 0.35896740817901235,
+            "recall": 0.5991388888888889,
+            "f1-score": 0.4489508830948755,
+            "support": 36000.0
+          }
+        }
+      },
+      "insights": "1. 주요 발견사항\n- 로지스틱 회귀분석을 통해 이진 분류를 수행한 결과, 전체 정확도는 60%로 나타났습니다. 이는 모델이 전체 데이터의 60%를 올바르게 분류했음을 의미합니다.\n- 클래스 '0'에 대한 정밀도(precision)와 재현율(recall)은 각각 59.91%와 100%로, 클래스 '0'은 매우 잘 예측되었으나, 클래스 '1'에 대한 정밀도와 재현율은 모두 0%로 나타났습니다. 이는 모델이 클래스 '1'을 전혀 예측하지 못했음을 의미합니다.\n\n2. 특이점\n- 혼동 행렬(confusion matrix)에서 클래스 '1'에 대한 예측이 전혀 이루어지지 않았습니다. 이는 모델이 클래스 불균형 문제를 겪고 있음을 시사합니다. 즉, 클래스 '0'에 비해 클래스 '1'의 데이터가 상대적으로 적어 모델이 이를 학습하지 못했을 가능성이 큽니다.\n- 클래스 '1'에 대한 f1-score가 0으로, 모델의 성능이 매우 낮음을 나타냅니다.\n\n3. 추천 사항\n- 데이터의 클래스 불균형 문제를 해결하기 위해 오버샘플링(over-sampling)이나 언더샘플링(under-sampling) 기법을 사용하여 데이터셋을 재구성하는 것을 고려해야 합니다.\n- 모델의 성능을 개선하기 위해 다른 분류 알고리즘(예: 랜덤 포레스트, 서포트 벡터 머신 등)을 시도해 볼 수 있습니다.\n- 모델의 하이퍼파라미터 튜닝을 통해 성능을 향상시킬 수 있는지 검토해야 합니다.\n- 추가적인 특징(feature)을 도입하거나, 현재 사용 중인 특징을 재검토하여 모델의 예측력을 높일 수 있는지 확인해야 합니다.",
+      "report": "1. 요약\n로지스틱 회귀분석 결과, 클래스 불균형 문제로 성능 저하.\n\n2. 분석 방법\n로지스틱 회귀분석을 통한 이진 분류 수행.\n\n3. 주요 발견사항\n클래스 '0'은 잘 예측, 클래스 '1'은 전혀 예측 못함.\n\n4. 결론 및 제언\n클래스 불균형 해결 및 다른 알고리즘 시도 필요.",
+      "feedback": {},
+      "feedback_point": {},
+      "generated_code": "```python\nfrom sklearn.model_selection import train_test_split\nfrom sklearn.linear_model import LogisticRegression\nfrom sklearn.metrics import accuracy_score, confusion_matrix, classification_report\nimport pandas as pd\n\n# 데이터 준비\nX = cust_intg[['나이', '성별코드', 'CB신용평점', '보험연령', '유지계약건수']]\nX = pd.get_dummies(X, columns=['나이', '성별코드'], drop_first=True)\ny = cust_intg['당월이탈고객여부']\n\n# 데이터 분할\nX_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)\n\n# 로지스틱 회귀 모델 생성 및 학습\nmodel = LogisticRegression(max_iter=1000)\nmodel.fit(X_train, y_train)\n\n# 예측\ny_pred = model.predict(X_test)\n\n# 평가\naccuracy = accuracy_score(y_test, y_pred)\nconf_matrix = confusion_matrix(y_test, y_pred)\nclass_report = classification_report(y_test, y_pred, output_dict=True)\n\n# 결과 저장\nanalytic_result = {\n    'accuracy': round(accuracy, 2),\n    'confusion_matrix': conf_matrix,\n    'classification_report': class_report\n}\n\n# 결과 출력\nprint('Accuracy:', round(accuracy, 2))\nprint('Confusion Matrix:\\n', conf_matrix)\nprint('Classification Report:\\n', pd.DataFrame(class_report).round(2))\n```",
+      "error_message": null
+    },
+    {
+      "role": "user",
+      "content": " 보험 해지 가능성이 높은 고객의 특성은 무엇인가요?",
+      "question_id": "temp_KSW_20250307_1355_3"
+    },
+    {
+      "role": "assistant",
+      "content": "분석이 완료되었습니다! 아래 결과를 확인해주세요.",
+      "question_id": "temp_KSW_20250307_1355_3",
+      "validated_code": "```python\nfrom sklearn.model_selection import train_test_split\nfrom sklearn.ensemble import RandomForestClassifier\nfrom sklearn.metrics import accuracy_score, confusion_matrix, classification_report\nfrom sklearn.impute import SimpleImputer\nfrom imblearn.over_sampling import SMOTE\nimport pandas as pd\n\n# 데이터 준비\nX = cust_intg[['나이', '성별코드', 'CB신용평점', '보험연령', '유지계약건수']]\nX = pd.get_dummies(X, columns=['나이', '성별코드'], drop_first=True)\ny = cust_intg['당월이탈고객여부']\n\n# 결측치 처리\nimputer = SimpleImputer(strategy='mean')\nX = imputer.fit_transform(X)\n\n# 클래스 불균형 해결\nsmote = SMOTE(random_state=42)\nX_res, y_res = smote.fit_resample(X, y)\n\n# 데이터 분할\nX_train, X_test, y_train, y_test = train_test_split(X_res, y_res, test_size=0.3, random_state=42)\n\n# 랜덤 포레스트 모델 생성 및 학습\nmodel = RandomForestClassifier(random_state=42)\nmodel.fit(X_train, y_train)\n\n# 예측\ny_pred = model.predict(X_test)\n\n# 평가\naccuracy = accuracy_score(y_test, y_pred)\nconf_matrix = confusion_matrix(y_test, y_pred)\nclass_report = classification_report(y_test, y_pred, output_dict=True)\n\n# 결과 저장\nanalytic_result = {\n    'accuracy': round(accuracy, 2),\n    'confusion_matrix': conf_matrix,\n    'classification_report': class_report\n}\n\n# 결과 출력\nprint('Accuracy:', round(accuracy, 2))\nprint('Confusion Matrix:\\n', conf_matrix)\nprint('Classification Report:\\n', pd.DataFrame(class_report).round(2))\n```",
+      "chart_filename": "../img/chart_20250307140502.png",
+      "analytic_result": {
+        "accuracy": "0.6",
+        "confusion_matrix": "[[13038  8470]\n [ 8725 12823]]",
+        "classification_report": {
+          "0": {
+            "precision": 0.5990901989615403,
+            "recall": 0.6061930444485772,
+            "f1-score": 0.6026206928427815,
+            "support": 21508.0
+          },
+          "1": {
+            "precision": 0.6022166909312919,
+            "recall": 0.5950900315574531,
+            "f1-score": 0.5986321514437105,
+            "support": 21548.0
+          },
+          "accuracy": 0.6006363805276849,
+          "macro avg": {
+            "precision": 0.600653444946416,
+            "recall": 0.6006415380030152,
+            "f1-score": 0.600626422143246,
+            "support": 43056.0
+          },
+          "weighted avg": {
+            "precision": 0.600654897237372,
+            "recall": 0.6006363805276849,
+            "f1-score": 0.6006245694205596,
+            "support": 43056.0
+          }
+        }
+      },
+      "insights": "1. 주요 발견사항\n   - 보험 해지 가능성이 높은 고객을 예측하는 모델의 정확도는 60%로 나타났습니다. 이는 모델이 고객의 해지 여부를 예측하는 데 있어 중간 정도의 성능을 보이고 있음을 의미합니다.\n   - 모델의 정밀도(precision)와 재현율(recall)은 각각 약 60%로, 해지 고객과 비해지 고객을 구분하는 데 있어 비슷한 성능을 보이고 있습니다.\n\n2. 특이점\n   - 혼동 행렬(confusion matrix)에서 해지 고객(1)과 비해지 고객(0)을 구분하는 데 있어 오차가 상당히 존재합니다. 특히, 해지 고객을 비해지 고객으로 잘못 분류한 경우(8725건)와 비해지 고객을 해지 고객으로 잘못 분류한 경우(8470건)가 비슷한 수준으로 나타났습니다.\n   - 모델의 성능이 전반적으로 낮은 편이므로, 고객의 해지 가능성을 예측하는 데 있어 추가적인 변수나 데이터가 필요할 수 있습니다.\n\n3. 추천 사항\n   - 모델의 성능을 향상시키기 위해 추가적인 고객 데이터를 수집하고 분석하는 것이 필요합니다. 예를 들어, 고객의 최근 거래 내역, 고객 서비스 이용 패턴, 고객 만족도 조사 결과 등을 포함할 수 있습니다.\n   - 해지 가능성이 높은 고객을 대상으로 한 맞춤형 마케팅 전략을 개발하여 고객 유지율을 높이는 방안을 고려해야 합니다.\n   - 모델의 성능을 개선하기 위해 다양한 머신러닝 알고리즘을 테스트하고, 하이퍼파라미터 튜닝을 통해 최적의 모델을 찾는 노력이 필요합니다.\n   - 고객 세분화를 통해 해지 가능성이 높은 고객 그룹을 식별하고, 이들 그룹에 대한 집중적인 관리 및 서비스 개선을 추진하는 것이 효과적일 수 있습니다.",
+      "report": "1. 요약  \n보험 해지 예측 모델의 정확도는 60%로 중간 수준입니다.\n\n2. 분석 방법  \n혼동 행렬과 분류 보고서를 통해 모델 성능 평가.\n\n3. 주요 발견사항  \n해지 고객과 비해지 고객 구분에 오차가 큽니다.\n\n4. 결론 및 제언  \n추가 데이터 수집 및 모델 개선이 필요합니다.",
+      "feedback": "1. 부족한 영역\n   - 현재 분석은 보험 해지 가능성을 예측하기 위해 랜덤 포레스트 모델을 사용하고 있으며, 모델의 정확도는 60%로 나타났습니다. 그러나, 이 결과만으로는 보험 해지 가능성이 높은 고객의 특성을 명확히 파악하기 어렵습니다. 특히, 모델의 해석 가능성 및 변수 중요도 분석이 부족하여 어떤 특성이 해지 가능성에 영향을 미치는지에 대한 구체적인 인사이트를 제공하지 못하고 있습니다.\n\n2. 상세한 보완 방법\n   1. **특성 중요도 분석**: \n      - **방법론**: 랜덤 포레스트 모델의 특성 중요도(feature importance)를 활용하여 각 특성이 모델의 예측에 얼마나 기여하는지를 분석합니다. 이를 통해 보험 해지 가능성에 영향을 미치는 주요 특성을 식별할 수 있습니다.\n   \n   2. **shap(shapley additive explanations) 값 분석**:\n      - **방법론**: shap 값은 각 특성이 예측에 미치는 영향을 설명하는 방법으로, 모델의 예측을 해석 가능하게 만듭니다. shap 값을 통해 개별 고객의 해지 가능성에 어떤 특성이 어떻게 기여하는지를 시각적으로 분석할 수 있습니다.\n   \n   3. **로지스틱 회귀 모델 사용**:\n      - **방법론**: 로지스틱 회귀는 해석 가능성이 높은 모델로, 각 특성의 회귀 계수를 통해 해지 가능성에 대한 영향을 정량적으로 평가할 수 있습니다. 이는 랜덤 포레스트와 같은 복잡한 모델의 결과를 보완하는 데 유용합니다.\n   \n   4. **클러스터링 기법 활용**:\n      - **방법론**: k-평균 클러스터링이나 계층적 클러스터링을 사용하여 고객을 유사한 특성을 가진 그룹으로 나누고, 각 그룹의 해지 가능성을 분석합니다. 이를 통해 특정 그룹의 고객이 해지 가능성이 높은 이유를 파악할 수 있습니다.\n\n3. 기대효과\n   - 특성 중요도 분석과 shap 값 분석을 통해 보험 해지 가능성에 영향을 미치는 주요 특성을 명확히 파악할 수 있습니다. 이는 고객 유지 전략을 수립하는 데 중요한 인사이트를 제공합니다.\n   - 로지스틱 회귀 모델을 통해 각 특성의 영향을 정량적으로 평가함으로써, 해지 가능성에 대한 보다 명확한 해석을 제공할 수 있습니다.\n   - 클러스터링 기법을 통해 고객을 세분화하여, 특정 그룹의 해지 가능성을 분석함으로써 맞춤형 고객 관리 전략을 수립할 수 있습니다.",
+      "feedback_point": [
+        "의사결정나무 기반의 변수 중요도 분석",
+        "SHAP 값 기반의 모델 해석",
+        "로지스틱 회귀를 통한 특성 영향 분석"
+      ],
+      "generated_code": "```python\nfrom sklearn.model_selection import train_test_split\nfrom sklearn.ensemble import RandomForestClassifier\nfrom sklearn.metrics import accuracy_score, confusion_matrix, classification_report\nfrom sklearn.impute import SimpleImputer\nfrom imblearn.over_sampling import SMOTE\nimport pandas as pd\n\n# 데이터 준비\nX = cust_intg[['나이', '성별코드', 'CB신용평점', '보험연령', '유지계약건수']]\nX = pd.get_dummies(X, columns=['나이', '성별코드'], drop_first=True)\ny = cust_intg['당월이탈고객여부']\n\n# 결측치 처리\nimputer = SimpleImputer(strategy='mean')\nX = imputer.fit_transform(X)\n\n# 클래스 불균형 해결\nsmote = SMOTE(random_state=42)\nX_res, y_res = smote.fit_resample(X, y)\n\n# 데이터 분할\nX_train, X_test, y_train, y_test = train_test_split(X_res, y_res, test_size=0.3, random_state=42)\n\n# 랜덤 포레스트 모델 생성 및 학습\nmodel = RandomForestClassifier(random_state=42)\nmodel.fit(X_train, y_train)\n\n# 예측\ny_pred = model.predict(X_test)\n\n# 평가\naccuracy = accuracy_score(y_test, y_pred)\nconf_matrix = confusion_matrix(y_test, y_pred)\nclass_report = classification_report(y_test, y_pred, output_dict=True)\n\n# 결과 저장\nanalytic_result = {\n    'accuracy': round(accuracy, 2),\n    'confusion_matrix': conf_matrix,\n    'classification_report': class_report\n}\n\n# 결과 출력\nprint('Accuracy:', round(accuracy, 2))\nprint('Confusion Matrix:\\n', conf_matrix)\nprint('Classification Report:\\n', pd.DataFrame(class_report).round(2))\n```",
+      "error_message": null
+    }
+  ]
+}
