@@ -64,7 +64,7 @@ def initialize_session_state():
 
     initial_states = {
         "show_popover": True,
-        "messages": [{"role": "assistant", "content": "안녕하세요! AI 분석 어시스턴트입니다. 무엇이든 물어보세요!"}]
+        "messages": [{"role": "assistant", "content": CONSTANTS['ASSISTANT_MESSAGE']}]
     }
     
     for key, value in initial_states.items():
@@ -466,13 +466,13 @@ def render_chat_interface():
                 # ✅ 일반 텍스트 메시지 출력 (질문 및 일반 답변)
                 if "content" in message :
                     if message["role"] == "assistant":
-                        if "error_message" in message :
+                        if "error_message" in message : # 에러 메시지 출력
                             if message['error_message'] is not None and message['error_message'] == {}:
                                 st.markdown(message["content"])
                         else :
-                            if message["content"] != "안녕하세요! AI 분석 어시스턴트입니다. 무엇이든 물어보세요!":
+                            if message["content"] != CONSTANTS["ASSISTANT_MESSAGE"]:
                                 st.markdown("💬 **응답**")
-   
+                            st.write(message["content"])
                     else:
                         st.write(message["content"])
 
@@ -483,9 +483,7 @@ def render_chat_interface():
                         code_to_display = message["generated_code"]
                         if "```python" in code_to_display:
                             code_to_display = code_to_display.split("```python")[1].split("```")[0]
-                        elif "```" in code_to_display:
-                            code_to_display = code_to_display.split("```")[1]
-                        st.code(code_to_display, language="python", )
+                            st.code(code_to_display, language="python", line_numbers=True   )
 
                 # ✅ 실행된 코드 출력
                 if "validated_code" in message and message["validated_code"]:
@@ -504,7 +502,7 @@ def render_chat_interface():
                           
                     for key, value in message["analytic_result"].items():
                         st.markdown(f"#### {key}")
-                        print(f"🔢 [render_chat_interface] | key : {key} | type: {type(value)}")
+                        # print(f"🔢 [render_chat_interface] | key : {key} | type: {type(value)}")
                         
                         # DataFrame 타입 확인 및 처리
                         if isinstance(value, dict) and value.get('type') == 'dataframe' and 'data' in value:
@@ -529,8 +527,6 @@ def render_chat_interface():
                                 # 딕셔너리 리스트는 DataFrame으로 변환하여 표시
                                 df = pd.DataFrame(value)
                                 st.dataframe(df, use_container_width=True)
-                            else:
-                                st.write(value)
                         else:
                             # 기타 타입
                             st.write(value)

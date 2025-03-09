@@ -100,7 +100,6 @@ def load_thread(thread_id):
                                     print(f"DataFrame 변환 오류: {e}")
             
             return thread_data
-    
     return None
 
 def sanitize_message_for_json(result):
@@ -126,19 +125,36 @@ def sanitize_message_for_json(result):
             # Timestamp 키와 값을 한 번에 처리
             value = convert_timestamp(value)
             
+            # Series 타입 처리 추가
+            if hasattr(value, 'to_dict') and hasattr(value, 'index'):  # Series 확인
+                if isinstance(value, pd.Series):
+                    sanitized[key] = {
+                        'type': 'series',
+                        'data': value.head(LIMIT_SIZE).to_dict()
+                    }
+                else:  # DataFrame인 경우
+                    sanitized[key] = {
+                        'type': 'dataframe',
+                        'data': value.head(LIMIT_SIZE).to_dict('records')
+                    }
             # DataFrame이나 복잡한 객체를 포함할 수 있는 analytic_result 처리
-            if isinstance(value, dict):
+            elif isinstance(value, dict):
                 sanitized[key] = {}
                 # 최상위 딕셔너리 크기 제한
                 limited_value = limit_dict_size(value)
                 for k, v in limited_value.items():
                     v = convert_timestamp(v)  # 중첩된 Timestamp 값 처리
-                    if hasattr(v, 'to_dict'):  # DataFrame인 경우
-                        # DataFrame 정보 저장 (타입 정보 포함)
-                        sanitized[key][k] = {
-                            'type': 'dataframe',
-                            'data': v.head(LIMIT_SIZE).to_dict('records')
-                        }
+                    if hasattr(v, 'to_dict'):  # DataFrame 또는 Series인 경우
+                        if isinstance(v, pd.Series):  # Series 타입 처리
+                            sanitized[key][k] = {
+                                'type': 'series',
+                                'data': v.head(LIMIT_SIZE).to_dict()
+                            }
+                        else:  # DataFrame 타입 처리
+                            sanitized[key][k] = {
+                                'type': 'dataframe',
+                                'data': v.head(LIMIT_SIZE).to_dict('records')
+                            }
                     elif isinstance(v, (list, dict)):  # 중첩된 구조체인 경우
                         try:
                             if isinstance(v, dict):
@@ -151,11 +167,17 @@ def sanitize_message_for_json(result):
                             sanitized[key][k] = str(v)
                     else:
                         sanitized[key][k] = v  # 원시 타입은 그대로 저장
-            elif hasattr(value, 'to_dict'):  # 최상위 레벨의 DataFrame 처리
-                sanitized[key] = {
-                    'type': 'dataframe',
-                    'data': value.head(LIMIT_SIZE).to_dict('records')
-                }
+            elif hasattr(value, 'to_dict'):  # 최상위 레벨의 DataFrame 또는 Series 처리
+                if isinstance(value, pd.Series):  # Series 타입 처리
+                    sanitized[key] = {
+                        'type': 'series',
+                        'data': value.head(LIMIT_SIZE).to_dict()
+                    }
+                else:  # DataFrame 타입 처리
+                    sanitized[key] = {
+                        'type': 'dataframe',
+                        'data': value.head(LIMIT_SIZE).to_dict('records')
+                    }
             else:
                 sanitized[key] = value  # 기타 타입은 그대로 저장
         return sanitized

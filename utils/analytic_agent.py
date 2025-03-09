@@ -47,6 +47,7 @@ PROCESSED_DATA_PATH = "../output/stage1/processed_data_info.xlsx"
 MAX_RETRIES = 3
 TOKEN_LIMIT = 10000 # ✅ 토큰 제한 설정 (예: 5000 토큰 초과 시 차단)
 RECURSION_LIMIT = 100
+exec_packages = {"pd" : pd, "np" : np, "plt" : matplotlib.pyplot, }
 
 ##########################################################################################
 # 구현 코드
@@ -54,7 +55,6 @@ RECURSION_LIMIT = 100
 # ✅ AI 분석 에이전트 상태 정의(state에 적재된 데이터를 기반으로 이동)
 class State(TypedDict):
     messages: List[BaseMessage]  # 🔹 사용자와 AI 간의 모든 대화 메시지 목록 (HumanMessage, AIMessage 등)
-    mart_info: str  # 🔹 현재 활성화된 데이터프레임 (분석 대상)
     generated_code: str  # 🔹 초기 생성된 코드
     q_category: str  # 🔹 Supervisor가 판단한 질문 유형 (Analytics, General, Knowledge)
     content: str  # 🔹 일반/지식 질문에 대한 응답
@@ -62,7 +62,6 @@ class State(TypedDict):
     regenerated_code: str  # 🔹 재생성된 코드
     validated_code: str  # 전체 실행까지 통과한 코드
     analytic_result: Dict  # 🔹 전체 데이터를 실행하여 얻은 최종 결과 딕셔너리
-    is_sample_result : bool  # 🔹 샘플 데이터 결과 여부
     error_message: dict  # 🔹 코드 실행 중 발생한 오류 메시지 (있다면 재시도할 때 활용)
     data_id: str  # 🔹 분석 결과를 저장할 때 부여되는 고유 ID (파일 저장 시 활용)
     insights: str  # 🔹 LLM이 분석 결과를 바탕으로 생성한 주요 인사이트
@@ -75,7 +74,7 @@ class State(TypedDict):
     request_summary: str  # 🔹 분석 요청을 한글로 요약한 내용
     installed_packages: Dict[str, str]  # 🔹 패키지 이름 및 버전 저장
     feedback: str  # 🔹 피드백 내용
-    feedback_point: list  # 🔹 피드백 포인트
+    feedback_point: list[str]  # 🔹 피드백 포인트
     start_from_analytics: bool  # 🔹 분석 시작 여부
 
 class Feedback(BaseModel):
@@ -140,7 +139,7 @@ class DataAnayticsAssistant:
         workflow.add_node("Chart_Builder", self.generate_chart)
         workflow.add_node("Regenerate_Chart", self.regenerate_chart)
         workflow.add_node("Report_Builder", self.generate_report)
-        workflow.add_node("After_Feedback", self.after_feedback)
+        workflow.add_node("Feedback", self.after_feedback)
 
         # 기본 흐름 정의
         workflow.add_edge(START, "Context")
@@ -517,7 +516,7 @@ class DataAnayticsAssistant:
         print(f"🧪 사용된 패키지 목록: {used_packages} | 패키지 버전 정보: {installed_versions}")
         try:
             # 실행 환경에 샘플 데이터프레임 추가
-            exec_globals = {}
+            exec_globals = exec_packages.copy()
 
             # 모든 데이터프레임을 exec_globals에 추가
             exec_globals.update(sample_marts)
@@ -533,7 +532,6 @@ class DataAnayticsAssistant:
                 "error_message": None,
                 "installed_packages": installed_versions,
                 "analytic_result": analytic_result,
-                "is_sample_result": True
             }, goto="Execute_Full")
 
         except Exception as e:
@@ -624,7 +622,7 @@ class DataAnayticsAssistant:
         full_marts = self.active_marts  # 전체 데이터프레임 사용
 
         # 실행 환경에 전체 데이터프레임 추가
-        exec_globals = {}
+        exec_globals = exec_packages.copy()
 
         # 모든 데이터프레임을 exec_globals에 추가
         exec_globals.update(full_marts)
@@ -694,7 +692,6 @@ class DataAnayticsAssistant:
                 "error_message": self._normalize_error_message(f"⚠️ {str(e)}"),
                 "from_full_execution": True,
                 "installed_packages": installed_versions,
-                "is_sample_result": True  # 전체 데이터 결과임을 표시
             }, goto="Save_Data")
 
         except Exception as e:
@@ -1256,114 +1253,70 @@ Do not hardcode any values - use the analytic_result dictionary directly.
         safe_locals = {}
         
         # 타임아웃 처리가 필요한 경우
-        if timeout is not None:
-            result = {"output": None, "analytic_result": {}, "error": None, "timeout": False}
-            
-            def target():
-                try:
-                    nonlocal captured_output, safe_locals # 네임스페이스 공유
-                    sys.stdout = captured_output  # 표준 출력 변경
-                    exec(code, exec_globals, safe_locals)  # 제한된 네임스페이스에서 실행
-                    sys.stdout = original_stdout  # 표준 출력을 원래대로 복원
-                    
-                    # 분석 결과 초기화
-                    results = None
-                    analytic_result = None
-                    
-                    # 전체 데이터 실행 시 분석 결과 추출
-                    if "result_df" in safe_locals:
-                        results = safe_locals["result_df"]
-                    elif "analytic_result" in safe_locals:
-                        results = safe_locals["analytic_result"]
-                    
-                    # 결과 타입에 따른 표준화 처리
-                    if results is not None:
-                        if isinstance(results, pd.DataFrame):
-                            analytic_result = results.to_dict('records') if not results.empty else {} # DataFrame을 dictionary로 변환
-                        elif isinstance(results, dict):
-                            
-                            analytic_result = results # Dictionary는 그대로 사용
-                        elif isinstance(results, list):
-                            analytic_result = results # List는 그대로 사용
-                        else:
-                            analytic_result = {"result": str(results)} # 기타 타입은 dictionary로 변환
-                        
-                    results = results if results is not None else {}
-                    analytic_result = analytic_result if analytic_result is not None else {}
-                    
-                    result["output"] = captured_output.getvalue()
-                    result["analytic_result"] = analytic_result
-                except Exception as e:
-                    captured_output.write(f"Error: {str(e)}\n")  # 에러 메시지 출력
-                    sys.stdout = original_stdout
-                    result["error"] = e
-            
-            # 스레드 생성 및 실행
-            thread = threading.Thread(target=target)
-            
-            # 표준 출력 복원
-            sys.stdout = original_stdout
-            thread.daemon = True
-            thread.start()
-            thread.join(timeout)
-            
-            if thread.is_alive():
-                # 타임아웃 발생
-                result["timeout"] = True
-                print(f"⚠️ 실행 시간이 {timeout}초를 초과하여 중단되었습니다.")
-                sys.stdout = original_stdout  # 표준 출력 복원 확인
-                
-                # 타임아웃 예외 발생
-                raise TimeoutError(f"실행 시간이 {timeout}초를 초과하여 중단되었습니다.")
-            
-            # 오류 발생 시 예외 재발생
-            if result["error"]:
-                raise result["error"]
-            
-            return result["output"], result["analytic_result"]
+        result = {"output": None, "analytic_result": {}, "error": None, "timeout": False}
         
-        # 타임아웃 처리가 필요 없는 경우 (기존 로직)
-        else:
+        def target():
             try:
+                nonlocal captured_output, safe_locals # 네임스페이스 공유
                 sys.stdout = captured_output  # 표준 출력 변경
                 exec(code, exec_globals, safe_locals)  # 제한된 네임스페이스에서 실행
                 sys.stdout = original_stdout  # 표준 출력을 원래대로 복원
                 
-                print(f"🔄 [_execute_code_with_capture] 코드 실행 결과 객체 : {safe_locals.keys()}")
-
                 # 분석 결과 초기화
                 results = None
                 analytic_result = None
                 
                 # 전체 데이터 실행 시 분석 결과 추출
-                if not is_sample:
-                    if "result_df" in safe_locals:
-                        results = safe_locals["result_df"]
-                    elif "analytic_result" in safe_locals:
-                        results = safe_locals["analytic_result"]
+                if "result_df" in safe_locals:
+                    results = safe_locals["result_df"]
+                elif "analytic_result" in safe_locals:
+                    results = safe_locals["analytic_result"]
+                
+                # 결과 타입에 따른 표준화 처리
+                if results is not None:
+                    if isinstance(results, pd.DataFrame):
+                        analytic_result = results.to_dict('records') if not results.empty else {} # DataFrame을 dictionary로 변환
+                    elif isinstance(results, dict):
+                        analytic_result = results # Dictionary는 그대로 사용
+                    elif isinstance(results, list):
+                        analytic_result = results # List는 그대로 사용
+                    else:
+                        analytic_result = {"result": str(results)} # 기타 타입은 dictionary로 변환
                     
-                    # 결과 타입에 따른 표준화 처리
-                    if results is not None:
-                        if isinstance(results, pd.DataFrame):
-                            # DataFrame을 dictionary로 변환
-                            analytic_result = results.to_dict('records') if not results.empty else {}
-                        elif isinstance(results, dict):
-                            # Dictionary는 그대로 사용
-                            analytic_result = results
-                        elif isinstance(results, list):
-                            # List는 그대로 사용
-                            analytic_result = results
-                        else:
-                            # 기타 타입은 dictionary로 변환
-                            analytic_result = {"result": str(results)}
+                results = results if results is not None else {}
+                analytic_result = analytic_result if analytic_result is not None else {}
                 
-                # 출력 및 분석 결과 반환
-                return captured_output.getvalue(), analytic_result
-                
+                result["output"] = captured_output.getvalue()
+                result["analytic_result"] = analytic_result
             except Exception as e:
                 captured_output.write(f"Error: {str(e)}\n")  # 에러 메시지 출력
                 sys.stdout = original_stdout
-                raise e
+                result["error"] = e
+        
+        # 스레드 생성 및 실행
+        thread = threading.Thread(target=target)
+        
+        # 표준 출력 복원
+        sys.stdout = original_stdout
+        thread.daemon = True
+        thread.start()
+        thread.join(timeout)
+        
+        if thread.is_alive():
+            # 타임아웃 발생
+            result["timeout"] = True
+            print(f"⚠️ 실행 시간이 {timeout}초를 초과하여 중단되었습니다.")
+            sys.stdout = original_stdout  # 표준 출력 복원 확인
+            
+            # 타임아웃 예외 발생
+            raise TimeoutError(f"실행 시간이 {timeout}초를 초과하여 중단되었습니다.")
+        
+        # 오류 발생 시 예외 재발생
+        if result["error"]:
+            raise result["error"]
+        
+        return result["output"], result["analytic_result"]
+        
 
     def _calculate_tokens(self, text: str) -> int:
         """텍스트의 토큰 수를 계산하는 메소드

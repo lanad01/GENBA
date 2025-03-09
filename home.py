@@ -47,17 +47,3 @@ st.markdown(f'''
 👨🏾‍💻 **데이터마트 생성** : 분석용 데이터마트를 생성(SQL) \n
 🤖 **분석 어시스턴트** : 데이터분석을 지원하는 생성형 Assistant \n
 ''')
-
-
-if "conversation" not in st.session_state:
-    st.session_state.conversation = None
-
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = None
-
-if "processComplete" not in st.session_state:
-    st.session_state.processComplete = None
-
-
-# st.sidebar.page_link("pages/분석 어시스턴트.py",)
-# st.sidebar.page_link("pages/문맥 등록.py", )
